@@ -1,7 +1,9 @@
 
 import express from 'express';
-import { setupVite } from './vite';
+import { setupVite } from '../vite.config';
 import apiRoutes from './routes/api.routes';
+import { db } from './db';
+import { storage } from './storage';
 
 const app = express();
 app.use(express.json());
