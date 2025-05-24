@@ -1,6 +1,6 @@
 
 import express from 'express';
-import { setupVite } from '../vite.config';
+import { setupVite } from './vite';
 import apiRoutes from './routes/api.routes';
 import { db } from './db';
 import { storage } from './storage';
