@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "id": 1,
+      "checksum": "0000_fluffy_initial_migration",
+      "executed_at": "2025-06-01T22:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "checksum": "0001_initial_schema",
+      "executed_at": "2025-06-01T22:00:00.000Z"
+    },
+    {
+      "idx": null,
+      "version": "7",
+      "when": 1748824145718,
+      "tag": "0NaN_flawless_lockjaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1748824530775,
+      "tag": "0001_marvelous_human_robot",
+      "breakpoints": true
+    }
+  ]
+}

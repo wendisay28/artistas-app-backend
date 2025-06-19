@@ -1,23 +1,144 @@
-import type { Express } from "express";
+import type { Express, Router, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
-
-// WebSocket server will be configured with HTTP server
+import { storage } from "./storage/index.js";
+import { setupAuth, isAuthenticated } from "./replitAuth.js";
 import { 
-  insertArtistSchema,
-  insertEventSchema,
-  insertVenueSchema,
-  insertRecommendationSchema,
-  insertBlogPostSchema,
-  insertFavoriteSchema,
-  insertReviewSchema,
-  insertHiringRequestSchema,
-  insertHiringResponseSchema,
-  insertMessageSchema,
+  users,
+  artists,
+  events,
+  venues,
+  recommendations,
+  reviews,
+  hiringRequests,
+  hiringResponses,
+  messages,
   categories
-} from "@shared/schema";
+} from "./schema.js";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+// Create schemas
+const insertArtistSchema = z.object({
+  userId: z.string(),
+  artistName: z.string(),
+  categoryId: z.number().optional(),
+  subcategories: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  artistType: z.string().optional(),
+  presentationType: z.array(z.string()).optional(),
+  serviceTypes: z.array(z.string()).optional(),
+  pricePerHour: z.number().optional(),
+  experience: z.string().optional(),
+  description: z.string().optional(),
+  portfolio: z.any().optional(),
+  isAvailable: z.boolean().optional(),
+  canTravel: z.boolean().optional()
+});
+
+const insertEventSchema = z.object({
+  organizerId: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  categoryId: z.number().optional(),
+  subcategories: z.array(z.string()).optional(),
+  tags: z.array(z.string()).optional(),
+  eventType: z.string().optional(),
+  startDate: z.date(),
+  endDate: z.date().optional(),
+  location: z.string().optional(),
+  city: z.string().optional(),
+  isOutdoor: z.boolean().optional(),
+  capacity: z.number().optional(),
+  ticketPrice: z.number().optional(),
+  isPublic: z.boolean().optional(),
+  status: z.enum(['draft', 'published', 'cancelled']).optional(),
+  multimedia: z.any().optional()
+});
+
+const insertHiringRequestSchema = z.object({
+  userId: z.string(),
+  artistId: z.number(),
+  eventId: z.number().optional(),
+  venueId: z.number().optional(),
+  message: z.string(),
+  budget: z.number().optional(),
+  status: z.enum(['pending', 'accepted', 'rejected']).optional()
+});
+
+const insertHiringResponseSchema = z.object({
+  requestId: z.number(),
+  artistId: z.string(),
+  message: z.string(),
+  proposal: z.any().optional(),
+  accepted: z.boolean().optional()
+});
+
+const insertMessageSchema = z.object({
+  senderId: z.string(),
+  receiverId: z.string(),
+  content: z.string(),
+  isRead: z.boolean().optional()
+});
+
+const insertRecommendationSchema = z.object({
+  userId: z.string(),
+  artistId: z.number().optional(),
+  eventId: z.number().optional(),
+  venueId: z.number().optional(),
+  type: z.enum(['artist', 'event', 'venue']),
+  score: z.string()
+});
+
+const insertReviewSchema = z.object({
+  userId: z.string(),
+  artistId: z.number().optional(),
+  eventId: z.number().optional(),
+  venueId: z.number().optional(),
+  type: z.enum(['artist', 'event', 'venue']),
+  score: z.string(),
+  reason: z.string().optional()
+});
+
+const insertVenueSchema = z.object({
+  ownerId: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  venueType: z.string().optional(),
+  services: z.array(z.string()).optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  openingHours: z.any().optional(),
+  contact: z.any().optional(),
+  multimedia: z.any().optional(),
+  coordinates: z.any().optional(),
+  dailyRate: z.number().optional(),
+  capacity: z.number().optional(),
+  isAvailable: z.boolean().optional()
+});
+
+// Create update schemas
+const updateArtistSchema = insertArtistSchema.partial();
+const updateVenueSchema = insertVenueSchema.partial();
+const updateEventSchema = insertEventSchema.partial();
+const updateHiringRequestSchema = insertHiringRequestSchema.partial();
+const updateHiringResponseSchema = insertHiringResponseSchema.partial();
+
+import type { ParamsDictionary } from 'express-serve-static-core';
+import type { ParsedQs } from 'qs';
+
+interface AuthenticatedRequest extends Request {
+  user: {
+    id: string;
+    [key: string]: any;
+  };
+}
+
+type AuthenticatedRequestHandler = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => Promise<void> | void;
 
 // WebSocket connection storage
 const wsConnections = new Map<string, WebSocket>();
@@ -49,14 +170,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.post('/api/hiring/requests', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      const request = await storage.hiring.createHiringRequest({
+        ...req.body,
+        clientId: req.user.id
+      });
+
+      res.json(request);
     } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      console.error('Error creating hiring request:', error);
+      res.status(500).json({ error: 'Failed to create hiring request' });
     }
   });
 
@@ -71,381 +195,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Artists routes
-  app.get('/api/artists', async (req, res) => {
-    try {
-      const filters = {
-        categoryId: req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined,
-        city: req.query.city as string,
-        minPrice: req.query.minPrice ? parseFloat(req.query.minPrice as string) : undefined,
-        maxPrice: req.query.maxPrice ? parseFloat(req.query.maxPrice as string) : undefined,
-        availability: req.query.availability as string,
-        rating: req.query.rating ? parseFloat(req.query.rating as string) : undefined,
-        search: req.query.search as string,
-      };
-      
-      const artists = await storage.getArtists(filters);
-      res.json(artists);
-    } catch (error) {
-      console.error("Error fetching artists:", error);
-      res.status(500).json({ message: "Failed to fetch artists" });
-    }
-  });
-
-  app.get('/api/artists/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const artist = await storage.getArtist(id);
-      
-      if (!artist) {
-        return res.status(404).json({ message: "Artist not found" });
-      }
-      
-      res.json(artist);
-    } catch (error) {
-      console.error("Error fetching artist:", error);
-      res.status(500).json({ message: "Failed to fetch artist" });
-    }
-  });
-
-  app.post('/api/artists', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const artistData = insertArtistSchema.parse({ ...req.body, userId });
-      
-      const artist = await storage.createArtist(artistData);
-      res.status(201).json(artist);
-    } catch (error) {
-      console.error("Error creating artist:", error);
-      res.status(400).json({ message: "Failed to create artist" });
-    }
-  });
-
-  app.put('/api/artists/:id', isAuthenticated, async (req: any, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const userId = req.user.claims.sub;
-      
-      // Check if user owns this artist profile
-      const existingArtist = await storage.getArtist(id);
-      if (!existingArtist || existingArtist.userId !== userId) {
-        return res.status(403).json({ message: "Not authorized to update this artist" });
-      }
-      
-      const artistData = insertArtistSchema.partial().parse(req.body);
-      const artist = await storage.updateArtist(id, artistData);
-      res.json(artist);
-    } catch (error) {
-      console.error("Error updating artist:", error);
-      res.status(400).json({ message: "Failed to update artist" });
-    }
-  });
-
-  // Events routes
-  app.get('/api/events', async (req, res) => {
-    try {
-      const filters = {
-        categoryId: req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined,
-        city: req.query.city as string,
-        startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
-        eventType: req.query.eventType as string,
-        search: req.query.search as string,
-      };
-      
-      const events = await storage.getEvents(filters);
-      res.json(events);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      res.status(500).json({ message: "Failed to fetch events" });
-    }
-  });
-
-  app.get('/api/events/:id', async (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const event = await storage.getEvent(id);
-      
-      if (!event) {
-        return res.status(404).json({ message: "Event not found" });
-      }
-      
-      res.json(event);
-    } catch (error) {
-      console.error("Error fetching event:", error);
-      res.status(500).json({ message: "Failed to fetch event" });
-    }
-  });
-
-  app.post('/api/events', isAuthenticated, async (req: any, res) => {
-    try {
-      const organizerId = req.user.claims.sub;
-      const eventData = insertEventSchema.parse({ ...req.body, organizerId });
-      
-      const event = await storage.createEvent(eventData);
-      res.status(201).json(event);
-    } catch (error) {
-      console.error("Error creating event:", error);
-      res.status(400).json({ message: "Failed to create event" });
-    }
-  });
-
-  // Venues routes
-  app.get('/api/venues', async (req, res) => {
-    try {
-      const filters = {
-        city: req.query.city as string,
-        venueType: req.query.venueType as string,
-        search: req.query.search as string,
-      };
-      
-      const venues = await storage.getVenues(filters);
-      res.json(venues);
-    } catch (error) {
-      console.error("Error fetching venues:", error);
-      res.status(500).json({ message: "Failed to fetch venues" });
-    }
-  });
-
-  app.post('/api/venues', isAuthenticated, async (req: any, res) => {
-    try {
-      const ownerId = req.user.claims.sub;
-      const venueData = insertVenueSchema.parse({ ...req.body, ownerId });
-      
-      const venue = await storage.createVenue(venueData);
-      res.status(201).json(venue);
-    } catch (error) {
-      console.error("Error creating venue:", error);
-      res.status(400).json({ message: "Failed to create venue" });
-    }
-  });
-
-  // Recommendations routes
-  app.get('/api/recommendations', async (req, res) => {
-    try {
-      const filters = {
-        categoryId: req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined,
-        city: req.query.city as string,
-        isActive: req.query.isActive ? req.query.isActive === 'true' : undefined,
-        search: req.query.search as string,
-      };
-      
-      const recommendations = await storage.getRecommendations(filters);
-      res.json(recommendations);
-    } catch (error) {
-      console.error("Error fetching recommendations:", error);
-      res.status(500).json({ message: "Failed to fetch recommendations" });
-    }
-  });
-
-  app.post('/api/recommendations', isAuthenticated, async (req: any, res) => {
-    try {
-      const authorId = req.user.claims.sub;
-      const recommendationData = insertRecommendationSchema.parse({ ...req.body, authorId });
-      
-      const recommendation = await storage.createRecommendation(recommendationData);
-      res.status(201).json(recommendation);
-    } catch (error) {
-      console.error("Error creating recommendation:", error);
-      res.status(400).json({ message: "Failed to create recommendation" });
-    }
-  });
-
   // Blog routes
-  app.get('/api/blog', async (req, res) => {
+  app.get('/api/blog', async (req: any, res) => {
     try {
       const filters = {
-        authorId: req.query.authorId as string,
-        category: req.query.category as string,
-        visibility: req.query.visibility as string || "public",
-        search: req.query.search as string,
+        authorId: req.query.authorId,
+        category: req.query.category,
+        visibility: req.query.visibility as 'draft' | 'public' | 'private',
+        search: req.query.search
       };
-      
-      const blogPosts = await storage.getBlogPosts(filters);
-      res.json(blogPosts);
+
+      const posts = await storage.blogStorage.getBlogPosts(filters);
+      res.json(posts);
     } catch (error) {
-      console.error("Error fetching blog posts:", error);
-      res.status(500).json({ message: "Failed to fetch blog posts" });
+      console.error('Error fetching blog posts:', error);
+      res.status(500).json({ error: 'Failed to fetch blog posts' });
     }
   });
 
   app.post('/api/blog', isAuthenticated, async (req: any, res) => {
-    try {
-      const authorId = req.user.claims.sub;
-      const blogPostData = insertBlogPostSchema.parse({ ...req.body, authorId });
-      
-      const blogPost = await storage.createBlogPost(blogPostData);
-      res.status(201).json(blogPost);
-    } catch (error) {
-      console.error("Error creating blog post:", error);
-      res.status(400).json({ message: "Failed to create blog post" });
-    }
-  });
+    const post = {
+      title: req.body.title,
+      content: req.body.content,
+      authorId: req.user.id,
+      tags: req.body.tags,
+      excerpt: req.body.excerpt,
+      featuredImage: req.body.featuredImage,
+      category: req.body.category,
+      visibility: req.body.visibility as 'draft' | 'public' | 'private',
+      publishedAt: req.body.publishedAt
+    };
 
-  // Favorites routes
-  app.get('/api/favorites', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const targetType = req.query.targetType as string;
-      
-      const favorites = await storage.getUserFavorites(userId, targetType);
-      res.json(favorites);
+      const newPost = await storage.blogStorage.createBlogPost(post);
+      res.json(newPost);
     } catch (error) {
-      console.error("Error fetching favorites:", error);
-      res.status(500).json({ message: "Failed to fetch favorites" });
-    }
-  });
-
-  app.post('/api/favorites', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const favoriteData = insertFavoriteSchema.parse({ ...req.body, userId });
-      
-      const favorite = await storage.addFavorite(favoriteData);
-      res.status(201).json(favorite);
-    } catch (error) {
-      console.error("Error adding favorite:", error);
-      res.status(400).json({ message: "Failed to add favorite" });
-    }
-  });
-
-  app.delete('/api/favorites/:targetType/:targetId', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { targetType, targetId } = req.params;
-      
-      const success = await storage.removeFavorite(userId, targetType, parseInt(targetId));
-      
-      if (success) {
-        res.json({ message: "Favorite removed successfully" });
-      } else {
-        res.status(404).json({ message: "Favorite not found" });
-      }
-    } catch (error) {
-      console.error("Error removing favorite:", error);
-      res.status(500).json({ message: "Failed to remove favorite" });
+      res.status(500).json({ error: 'Error creating blog post' });
     }
   });
 
   // Reviews routes
-  app.get('/api/reviews/:targetType/:targetId', async (req, res) => {
-    try {
-      const { targetType, targetId } = req.params;
-      const reviews = await storage.getReviews(targetType, parseInt(targetId));
-      res.json(reviews);
-    } catch (error) {
-      console.error("Error fetching reviews:", error);
-      res.status(500).json({ message: "Failed to fetch reviews" });
-    }
-  });
-
   app.post('/api/reviews', isAuthenticated, async (req: any, res) => {
     try {
-      const reviewerId = req.user.claims.sub;
-      const reviewData = insertReviewSchema.parse({ ...req.body, reviewerId });
-      
-      // Check if user can review this target
-      const canReview = await storage.canUserReview(reviewerId, reviewData.targetType, reviewData.targetId);
-      
+      const { targetType, targetId, score, reason } = req.body;
+      const userId = req.user.id;
+
+      const canReview = await storage.reviews.canUserReview(
+        userId,
+        targetType as 'artist' | 'event' | 'venue',
+        targetId
+      );
+
       if (!canReview) {
-        return res.status(403).json({ message: "You can only review artists/events you have contracted or attended" });
+        return res.status(400).json({ error: 'User cannot review this item' });
       }
-      
-      const review = await storage.createReview({ ...reviewData, canReview: true });
-      res.status(201).json(review);
-    } catch (error) {
-      console.error("Error creating review:", error);
-      res.status(400).json({ message: "Failed to create review" });
-    }
-  });
 
-  // Hiring requests routes
-  app.get('/api/hiring-requests', isAuthenticated, async (req: any, res) => {
-    try {
-      const requests = await storage.getActiveHiringRequests();
-      res.json(requests);
-    } catch (error) {
-      console.error("Error fetching hiring requests:", error);
-      res.status(500).json({ message: "Failed to fetch hiring requests" });
-    }
-  });
-
-  app.get('/api/hiring-requests/:id', isAuthenticated, async (req: any, res) => {
-    try {
-      const request = await storage.getHiringRequest(req.params.id);
-      
-      if (!request) {
-        return res.status(404).json({ message: "Hiring request not found" });
-      }
-      
-      res.json(request);
-    } catch (error) {
-      console.error("Error fetching hiring request:", error);
-      res.status(500).json({ message: "Failed to fetch hiring request" });
-    }
-  });
-
-  app.post('/api/hiring-requests', isAuthenticated, async (req: any, res) => {
-    try {
-      const clientId = req.user.claims.sub;
-      
-      // Set expiration to 24 hours from now
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 24);
-      
-      const requestData = insertHiringRequestSchema.parse({ 
-        ...req.body, 
-        clientId,
-        expiresAt
+      const review = await storage.reviews.createReview({
+        userId,
+        type: targetType as 'artist' | 'event' | 'venue',
+        score: score.toString(),
+        reason: reason,
+        artistId: targetType === 'artist' ? targetId : undefined,
+        eventId: targetType === 'event' ? targetId : undefined,
+        venueId: targetType === 'venue' ? targetId : undefined
       });
-      
-      const request = await storage.createHiringRequest(requestData);
-      
-      // Notify relevant artists via WebSocket
-      broadcastToCategory(requestData.categoryId, requestData.city, {
-        type: 'hiring_request',
-        data: request
-      });
-      
-      res.status(201).json(request);
+
+      res.json(review);
     } catch (error) {
-      console.error("Error creating hiring request:", error);
-      res.status(400).json({ message: "Failed to create hiring request" });
+      console.error('Error creating review:', error);
+      res.status(500).json({ error: 'Failed to create review' });
     }
   });
 
-  app.post('/api/hiring-requests/:id/responses', isAuthenticated, async (req: any, res) => {
+  // Hiring responses routes
+  app.post('/api/hiring/responses', isAuthenticated, async (req: Request, res: Response) => {
+    const user = req.user as { id: string };
     try {
-      const requestId = req.params.id;
-      const userId = req.user.claims.sub;
+      const { requestId, message, proposal } = req.body;
       
-      // Find artist profile for this user
-      const artists = await storage.getArtists({ userId });
-      if (artists.length === 0) {
-        return res.status(403).json({ message: "Only artists can respond to hiring requests" });
+      // Get artist ID from user ID
+      const artists = await storage.artistStorage.getArtists({ userId: user.id });
+      if (!artists || artists.length === 0) {
+        return res.status(400).json({ error: 'User is not registered as an artist' });
       }
-      
       const artist = artists[0];
-      const responseData = insertHiringResponseSchema.parse({
-        ...req.body,
+
+      // Create the response
+      const response = await storage.hiring.createHiringResponse({
         requestId,
-        artistId: artist.id
+        artistId: artist.id,
+        proposal,
+        accepted: true, // Default to accepted when artist responds
+        message
       });
-      
-      const response = await storage.createHiringResponse(responseData);
-      
-      // Notify client via WebSocket
-      const request = await storage.getHiringRequest(requestId);
-      if (request) {
-        notifyUser(request.clientId, {
-          type: 'hiring_response',
-          data: { response, artist }
-        });
-      }
-      
-      res.status(201).json(response);
+
+      res.json(response);
     } catch (error) {
-      console.error("Error creating hiring response:", error);
-      res.status(400).json({ message: "Failed to create hiring response" });
+      console.error('Error creating hiring response:', error);
+      res.status(500).json({ error: 'Failed to create hiring response' });
     }
   });
 
@@ -457,7 +304,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(messages);
     } catch (error) {
       console.error("Error fetching messages:", error);
-      res.status(500).json({ message: "Failed to fetch messages" });
+      res.status(500).json({ error: 'Error fetching messages' });
     }
   });
 
@@ -522,7 +369,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     ws.on('close', () => {
       // Remove connection from map
-      for (const [userId, connection] of wsConnections.entries()) {
+      const entries = Array.from(wsConnections.entries());
+      for (const [userId, connection] of entries) {
         if (connection === ws) {
           wsConnections.delete(userId);
           console.log(`User ${userId} disconnected from WebSocket`);
@@ -544,7 +392,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  function broadcastToCategory(categoryId: number, city: string, data: any) {
+  function broadcastToCategory(categoryId: number | undefined, city: string, data: any) {
+    if (!categoryId) {
+      console.warn('Attempted to broadcast without categoryId');
+      return;
+    }
+
     // This would need to be enhanced to track which artists are in which categories
     // For now, broadcast to all connected users
     wsConnections.forEach((connection, userId) => {
