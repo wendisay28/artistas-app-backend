@@ -18,6 +18,9 @@ import { getRecentPosts as getBlogRecentPosts } from '../controllers/blog.contro
 // Importar controladores de usuario
 import { userController } from '../controllers/user.controller';
 
+// Importar controladores de elementos destacados
+import * as featuredController from '../controllers/featured.controller';
+
 // Importar rutas
 import firebaseTestRoutes from './firebase-test';
 import storageTestRoutes from './storage-test';
@@ -52,8 +55,26 @@ v1.get('/blog', getBlogRecentPosts as RouteHandler);
 const protectedRoutes = Router();
 protectedRoutes.use(authMiddleware);
 
-// Rutas de eventos protegidas
-protectedRoutes.post('/events', EventController.createEvent as RouteHandler);
+// Aplicar middleware de autenticación a todas las rutas protegidas
+v1.use(authMiddleware);
+
+// Rutas de elementos destacados
+v1.get('/featured', featuredController.getUserFeaturedItems as RouteHandler);
+v1.get('/users/:userId/featured', featuredController.getUserFeaturedItems as RouteHandler);
+v1.post('/featured', featuredController.createFeaturedItem as RouteHandler);
+v1.put('/featured/:id', featuredController.updateFeaturedItem as RouteHandler);
+v1.delete('/featured/:id', featuredController.deleteFeaturedItem as RouteHandler);
+
+// Rutas de perfil
+v1.get('/profile', userController.getProfile as RouteHandler);
+v1.put('/profile', userController.updateProfile as RouteHandler);
+v1.get('/profile/:username', userController.getPublicProfile as RouteHandler);
+
+// Rutas de eventos
+v1.post('/events', EventController.createEvent as RouteHandler);
+v1.put('/events/:id', EventController.updateEvent as RouteHandler);
+v1.post('/events/:id/cancel', EventController.cancelEvent as RouteHandler);
+v1.get('/events/search', EventController.searchEvents as RouteHandler);
 
 // Rutas de perfil protegidas
 protectedRoutes.get('/profile', userController.getProfile as RouteHandler);

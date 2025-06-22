@@ -399,6 +399,18 @@ export const hiringRequests = pgTable('hiring_requests', {
   updatedAt: timestamp('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const featuredItems = pgTable('featured_items', {
+  id: serial('id').primaryKey(),
+  userId: varchar('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title: varchar('title').notNull(),
+  description: text('description'),
+  url: text('url').notNull(),
+  type: varchar('type', { enum: ['youtube', 'spotify', 'vimeo', 'soundcloud', 'other'] }).notNull(),
+  thumbnailUrl: text('thumbnail_url'),
+  createdAt: timestamp('created_at').default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: timestamp('updated_at').default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const hiringResponses = pgTable('hiring_responses', {
   id: serial('id').primaryKey(),
   requestId: integer('request_id').notNull().references(() => hiringRequests.id),
