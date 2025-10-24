@@ -6,15 +6,23 @@ const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // Validar que las variables de entorno estén definidas
 if (!supabaseUrl || !supabaseServiceRoleKey) {
-  throw new Error('Las variables de entorno SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son requeridas');
+  if (process.env.NODE_ENV === 'test') {
+    console.warn('⚠️  Advertencia: Usando credenciales de prueba para Supabase');
+  } else {
+    throw new Error('Las variables de entorno SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY son requeridas');
+  }
 }
 // Crear el cliente de Supabase con permisos de administrador
-const supabase = createClient(supabaseUrl, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false
+const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseServiceRoleKey || 'placeholder-key',
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
   }
-});
+);
 
 export { supabase };
 

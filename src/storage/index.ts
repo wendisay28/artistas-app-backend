@@ -1,7 +1,6 @@
 // External Dependencies
-import { and, eq, isNotNull, or, sql } from 'drizzle-orm';
+import { eq, isNotNull, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import type { InferSelectModel, SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 // Database Schema
@@ -13,7 +12,6 @@ import type { IStorage, StorageConfig } from './interfaces.js';
 
 // Storage Implementations
 import { RecommendationStorage } from './recommendations.js';
-import { FavoriteStorage } from './favorites.js';
 import { BlogStorage } from './blog.js';
 import { ReviewStorage } from './reviews.js';
 import { CategoryStorage } from './categories.js';
@@ -25,7 +23,7 @@ import { MessageStorage } from './messages.js';
 import { HiringStorage } from './hiring.js';
 
 // Re-export commonly used schema tables for easier access
-const { users, events, venues, blogPosts, artists, categories, favorites, messages, recommendations } = schema;
+const { users, events, venues, blogPosts, artists, categories, messages, recommendations } = schema;
 
 const config: StorageConfig = { db };
 
@@ -37,26 +35,11 @@ type ArtistWithRelations = typeof artists.$inferSelect & {
   category?: CategoryWithRelations;
 };
 
-type FavoriteWithUser = typeof favorites.$inferSelect & {
-  user: UserWithRelations;
-};
-
 type SocialMedia = {
   instagram?: string;
   twitter?: string;
   facebook?: string;
   website?: string;
-};
-
-type FavoriteItem = {
-  type: 'artist' | 'event' | 'venue' | 'gallery';
-  id: number;
-  userId: string;
-  targetId: number;
-  targetType: string;
-  createdAt: Date;
-  updatedAt: Date;
-  user: UserWithRelations;
 };
 
 // Definir el tipo para el propietario del venue
@@ -79,7 +62,6 @@ export class DatabaseStorage implements IStorage {
   public artistStorage: ArtistStorage;
   public messageStorage: MessageStorage;
   public recommendationStorage: RecommendationStorage;
-  public favoriteStorage: FavoriteStorage;
   public blogStorage: BlogStorage;
   public categoryStorage: CategoryStorage;
   public reviews: ReviewStorage;
@@ -96,7 +78,6 @@ export class DatabaseStorage implements IStorage {
     this.artistStorage = new ArtistStorage(this.db);
     this.messageStorage = new MessageStorage(this.db);
     this.recommendationStorage = new RecommendationStorage(this.db);
-    this.favoriteStorage = new FavoriteStorage(this.db);
     this.blogStorage = new BlogStorage(this.db);
     this.categoryStorage = new CategoryStorage(this.db);
     this.reviews = new ReviewStorage(this.db);
@@ -140,51 +121,62 @@ export class DatabaseStorage implements IStorage {
       isVerified: boolean;
     }>
   ): Promise<UserWithRelations> {
-    // Crear el objeto con valores por defecto
     const now = new Date();
-    const userData = {
-      id: user.id,
-      email: user.email || '',
-      firstName: user.firstName ?? null,
-      lastName: user.lastName ?? null,
-      profileImageUrl: user.profileImageUrl ?? null,
-      userType: user.userType ?? 'general',
-      bio: user.bio ?? null,
-      city: user.city ?? null,
-      isVerified: user.isVerified ?? false,
-      createdAt: now,
-      updatedAt: now
-    };
-
-    // Usar sql.raw para manejar los valores nulos correctamente
-    const [result] = await this.db
-      .insert(users)
-      .values({
-        ...userData,
-        firstName: userData.firstName === null ? sql`NULL` : userData.firstName,
-        lastName: userData.lastName === null ? sql`NULL` : userData.lastName,
-        bio: userData.bio === null ? sql`NULL` : userData.bio,
-        city: userData.city === null ? sql`NULL` : userData.city,
-        profileImageUrl: userData.profileImageUrl === null ? sql`NULL` : userData.profileImageUrl
-      })
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
-          // Nota: solo actualizamos email si viene en la petición; de lo contrario se mantiene.
-          ...(typeof (user as any).email !== 'undefined' ? { email: userData.email } : {}),
-          firstName: userData.firstName === null ? sql`NULL` : userData.firstName,
-          lastName: userData.lastName === null ? sql`NULL` : userData.lastName,
-          profileImageUrl: userData.profileImageUrl === null ? sql`NULL` : userData.profileImageUrl,
-          userType: userData.userType,
-          bio: userData.bio === null ? sql`NULL` : userData.bio,
-          city: userData.city === null ? sql`NULL` : userData.city,
-          isVerified: userData.isVerified,
-          updatedAt: now
-        }
-      })
-      .returning();
     
-    return result as UserWithRelations;
+    // Primero verificar si el usuario ya existe
+    const [existingUser] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    
+    if (existingUser) {
+      // Si existe, solo actualizar los campos proporcionados
+      const updateData: any = {
+        updatedAt: now
+      };
+      
+      if (user.email !== undefined) updateData.email = user.email;
+      if (user.firstName !== undefined) updateData.firstName = user.firstName;
+      if (user.lastName !== undefined) updateData.lastName = user.lastName;
+      if (user.profileImageUrl !== undefined) updateData.profileImageUrl = user.profileImageUrl;
+      if (user.userType !== undefined) updateData.userType = user.userType;
+      if (user.bio !== undefined) updateData.bio = user.bio;
+      if (user.city !== undefined) updateData.city = user.city;
+      if (user.isVerified !== undefined) updateData.isVerified = user.isVerified;
+      
+      const [result] = await this.db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, user.id))
+        .returning();
+      
+      return result as UserWithRelations;
+    } else {
+      // Si no existe, crear uno nuevo con valores por defecto
+      const [result] = await this.db
+        .insert(users)
+        .values({
+          id: user.id,
+          email: user.email || '',
+          firstName: user.firstName || 'Usuario',
+          lastName: user.lastName || '',
+          profileImageUrl: user.profileImageUrl ?? null,
+          userType: user.userType ?? 'general',
+          bio: user.bio ?? null,
+          city: user.city ?? null,
+          isVerified: user.isVerified ?? false,
+          createdAt: now,
+          updatedAt: now
+        })
+        .returning();
+      
+      if (!result) {
+        throw new Error('Failed to create user');
+      }
+      
+      return result as UserWithRelations;
+    }
   }
 
   // Artist methods
@@ -223,47 +215,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getArtists(filters: { categoryId?: number; userId?: string } = {}): Promise<ArtistWithRelations[]> {
-    try {
-      const { categoryId, userId } = filters;
-      
-      // Build the base query with necessary joins
-      const query = this.db
-        .select()
-        .from(artists)
-        .leftJoin(users, eq(artists.userId, users.id))
-        .leftJoin(categories, eq(artists.categoryId, categories.id));
-
-      // Apply filters if present
-      const conditions: SQL[] = [];
-      
-      if (categoryId) {
-        conditions.push(eq(artists.categoryId, categoryId));
-      }
-      
-      if (userId) {
-        conditions.push(eq(artists.userId, userId));
-      }
-      
-      // Apply conditions with AND if any
-      if (conditions.length > 0) {
-        query.where(and(...conditions));
-      }
-      
-      // Execute the query
-      const results = await query;
-      
-      // Transform and return the results (omit orphan rows without user)
-      return results
-        .filter(row => !!row.users)
-        .map(row => ({
-          ...row.artists,
-          user: row.users!,
-          category: row.categories || undefined
-        }));
-    } catch (error) {
-      console.error('Error fetching artists:', error);
-      throw new Error('Failed to fetch artists');
-    }
+    // Delegate to ArtistStorage which includes discipline, role, specialization joins
+    return this.artistStorage.getArtists(filters) as any;
   }
 
   async createArtist(artistData: Omit<typeof artists.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof artists.$inferSelect> {
@@ -341,23 +294,6 @@ export class DatabaseStorage implements IStorage {
 
   async createRecommendation(recommendation: Omit<typeof recommendations.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>) {
     return this.recommendationStorage.createRecommendation(recommendation);
-  }
-
-  // Favorite methods
-  async getFavorites(filters: { userId: string }) {
-    return this.favoriteStorage.getFavorites(filters);
-  }
-
-  async getUserFavorites(userId: string, targetType?: 'artist' | 'gallery' | 'event' | 'venue') {
-    return this.favoriteStorage.getUserFavorites(userId, targetType);
-  }
-
-  async addFavorite(favorite: Omit<typeof favorites.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>) {
-    return this.favoriteStorage.addFavorite(favorite);
-  }
-
-  async removeFavorite(userId: string, targetId: number, targetType: 'artist' | 'gallery' | 'event' | 'venue') {
-    return this.favoriteStorage.removeFavorite(userId, targetId, targetType);
   }
 
   // Blog methods

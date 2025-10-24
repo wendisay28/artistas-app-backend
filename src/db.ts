@@ -4,6 +4,7 @@ import postgres from 'postgres';
 import dotenv from 'dotenv';
 import * as schema from './schema.js';
 import type { Database } from './types/db.js';
+import { logger } from './utils/logger.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -22,9 +23,9 @@ let client: ReturnType<typeof postgres> | undefined;
 
 if (!hasDatabaseUrl) {
   if (process.env.NODE_ENV !== 'production') {
-    console.warn('⚠️  DATABASE_URL no definida. Ejecutando sin base de datos en desarrollo.');
+    logger.warn('DATABASE_URL no definida. Ejecutando sin base de datos en desarrollo', undefined, 'DB');
   } else {
-    console.error('❌ Error: DATABASE_URL no está definida en las variables de entorno');
+    logger.error('DATABASE_URL no está definida en las variables de entorno', undefined, 'DB');
     // Crear un proxy que lance errores en tiempo de ejecución si se usa sin DB
     db = new Proxy({}, {
       get() {
@@ -37,16 +38,20 @@ if (!hasDatabaseUrl) {
     // dbReady permanece en false
   }
 } else {
-  console.log('🔍 Configurando conexión a la base de datos...');
+  logger.info('Configurando conexión a la base de datos...', undefined, 'DB');
   try {
-    console.log('🔗 Host de la base de datos:', new URL(process.env.DATABASE_URL!).hostname);
+    const dbHost = new URL(process.env.DATABASE_URL!).hostname;
+    logger.info(`Host de la base de datos: ${dbHost}`, undefined, 'DB');
   } catch {}
 
   // Crear el cliente de PostgreSQL
+  // Configuración SSL segura: solo deshabilitar verificación en desarrollo local
+  const sslConfig = process.env.NODE_ENV === 'development' && process.env.DATABASE_URL!.includes('localhost')
+    ? false  // Sin SSL para desarrollo local
+    : { rejectUnauthorized: true };  // SSL seguro para producción y servicios remotos
+
   client = postgres(process.env.DATABASE_URL!, {
-    ssl: {
-      rejectUnauthorized: false
-    },
+    ssl: sslConfig,
     max: 10,
     idle_timeout: 20,
     max_lifetime: 60 * 30,
@@ -80,8 +85,31 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Migraciones
 export async function runMigrations() {
-  // Implementación de migraciones
-  console.log('ℹ️  Migraciones automáticas deshabilitadas temporalmente');
+  if (!dbReady || !client) {
+    logger.warn('No se pueden ejecutar migraciones: base de datos no configurada', undefined, 'DB');
+    return;
+  }
+
+  try {
+    const { migrate } = await import('drizzle-orm/postgres-js/migrator');
+    logger.info('Ejecutando migraciones...', undefined, 'DB');
+
+    await migrate(db, {
+      migrationsFolder: './drizzle',
+      migrationsTable: 'drizzle_migrations',
+    });
+
+    logger.info('Migraciones ejecutadas correctamente', undefined, 'DB');
+  } catch (error) {
+    logger.error('Error al ejecutar migraciones', error as Error, 'DB');
+    throw error;
+  }
 }
 
-console.log('ℹ️  Migraciones automáticas deshabilitadas temporalmente');
+// Ejecutar migraciones automáticamente en producción
+if (process.env.NODE_ENV === 'production' && dbReady) {
+  runMigrations().catch(err => {
+    console.error('❌ Error crítico al ejecutar migraciones:', err);
+    process.exit(1);
+  });
+}

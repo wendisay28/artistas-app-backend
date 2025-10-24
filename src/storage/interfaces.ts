@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { events, users, categories, venues, artists, messages, recommendations, favorites, blogPosts } from '../schema.js';
+import { events, users, categories, venues, artists, messages, recommendations, blogPosts } from '../schema.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
 export interface IStorage {
@@ -24,10 +24,6 @@ export interface IStorage {
   sendMessage(message: Omit<typeof messages.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof messages.$inferSelect>;
   getRecommendations(filters: { categoryId?: number, city?: string, isActive?: boolean, search?: string }): Promise<(typeof recommendations.$inferSelect & { user: typeof users.$inferSelect })[]>;
   createRecommendation(recommendation: Omit<typeof recommendations.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof recommendations.$inferSelect>;
-  getFavorites(filters: { userId: string }): Promise<(typeof favorites.$inferSelect & { user: typeof users.$inferSelect })[]>;
-  getUserFavorites(userId: string, targetType?: string): Promise<(typeof favorites.$inferSelect & { user: typeof users.$inferSelect })[]>;
-  addFavorite(favorite: Omit<typeof favorites.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof favorites.$inferSelect>;
-  removeFavorite(userId: string, targetId: number, targetType: string): Promise<void>;
   getBlogPost(id: number): Promise<(typeof blogPosts.$inferSelect & { author: typeof users.$inferSelect }) | undefined>;
   getBlogPosts(filters: { authorId?: string, category?: string, visibility?: 'draft' | 'public' | 'private', search?: string }): Promise<(typeof blogPosts.$inferSelect & { author: typeof users.$inferSelect })[]>;
   

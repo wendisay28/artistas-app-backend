@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { artists, users, categories } from '../schema.js';
+import { artists, users, categories, disciplines, roles, specializations } from '../schema.js';
 import { eq, and, isNull, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -8,11 +8,17 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 type UserType = typeof users.$inferSelect;
 type ArtistType = typeof artists.$inferSelect;
 type CategoryType = typeof categories.$inferSelect;
+type DisciplineType = typeof disciplines.$inferSelect;
+type RoleType = typeof roles.$inferSelect;
+type SpecializationType = typeof specializations.$inferSelect;
 
 type ArtistWithRelations = {
   artist: ArtistType;
   user: UserType;
   category?: CategoryType | null;
+  discipline?: DisciplineType | null;
+  role?: RoleType | null;
+  specialization?: SpecializationType | null;
 };
 
 export class ArtistStorage {
@@ -45,17 +51,26 @@ export class ArtistStorage {
   async getArtists(filters?: { categoryId?: number; userId?: string }): Promise<ArtistWithRelations[]> {
     const userAlias = alias(users, 'user');
     const categoryAlias = alias(categories, 'category');
+    const disciplineAlias = alias(disciplines, 'discipline');
+    const roleAlias = alias(roles, 'role');
+    const specializationAlias = alias(specializations, 'specialization');
 
     // Construir la consulta base con los joins
     const query = this.db
       .select({
         artist: artists,
         user: userAlias,
-        category: categoryAlias
+        category: categoryAlias,
+        discipline: disciplineAlias,
+        role: roleAlias,
+        specialization: specializationAlias
       })
       .from(artists)
       .leftJoin(userAlias, eq(artists.userId, userAlias.id))
-      .leftJoin(categoryAlias, eq(artists.categoryId, categoryAlias.id));
+      .leftJoin(categoryAlias, eq(artists.categoryId, categoryAlias.id))
+      .leftJoin(disciplineAlias, eq(artists.disciplineId, disciplineAlias.id))
+      .leftJoin(roleAlias, eq(artists.roleId, roleAlias.id))
+      .leftJoin(specializationAlias, eq(artists.specializationId, specializationAlias.id));
 
     // Aplicar condiciones de filtrado
     const conditions = [];
@@ -80,13 +95,16 @@ export class ArtistStorage {
     
     // Filtrar resultados nulos y mapear a la estructura esperada
     return results
-      .filter((result): result is { artist: ArtistType; user: UserType; category: CategoryType | null } => {
+      .filter((result): result is { artist: ArtistType; user: UserType; category: CategoryType | null; discipline: any; role: any; specialization: any } => {
         return result.user !== null;
       })
       .map(result => ({
         artist: result.artist,
         user: result.user,
-        category: result.category || undefined
+        category: result.category || undefined,
+        discipline: result.discipline || undefined,
+        role: result.role || undefined,
+        specialization: result.specialization || undefined
       }));
   }
 

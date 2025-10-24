@@ -98,6 +98,11 @@ export const authController = {
               profileImageUrl: firebaseInfo.photoURL || null,
               userType: 'general' as const, // Tipo de usuario por defecto
               isVerified: firebaseInfo.emailVerified || false,
+              // Campos de onboarding - usuario nuevo necesita completar onboarding
+              emailVerified: firebaseInfo.emailVerified || false,
+              onboardingCompleted: false,
+              onboardingStep: 'user-type-selection',
+              onboardingStartedAt: sql`CURRENT_TIMESTAMP`,
               // Valores por defecto
               isFeatured: false,
               isAvailable: true,

@@ -14,8 +14,8 @@ export class UserStorage {
     return user;
   }
 
-  async getUsers(filters: { 
-    userType?: 'general' | 'artist' | 'company' 
+  async getUsers(filters: {
+    userType?: 'general' | 'artist'
   }): Promise<typeof users.$inferSelect[]> {
     const query = this.db.select().from(users);
     
@@ -26,15 +26,16 @@ export class UserStorage {
     return await query;
   }
 
-  async upsertUser(userData: { 
-    id: string; 
-    email?: string; 
-    firstName?: string; 
-    lastName?: string; 
-    profileImageUrl?: string | null; 
-    userType?: 'general' | 'artist' | 'company'; 
-    bio?: string | null; 
-    city?: string | null; 
+  async upsertUser(userData: {
+    id: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    username?: string;
+    profileImageUrl?: string | null;
+    userType?: 'general' | 'artist';
+    bio?: string | null;
+    city?: string | null;
     isVerified?: boolean;
   }): Promise<typeof users.$inferSelect> {
     const [existingUser] = await this.db
@@ -43,21 +44,23 @@ export class UserStorage {
       .where(eq(users.id, userData.id));
 
     const now = new Date();
-    
+
     // Función auxiliar para limpiar los datos
     const prepareData = () => {
       const data: Record<string, any> = {};
-      
+
       // Solo agregar los campos que vienen en userData
-      if ('email' in userData) data.email = userData.email || '';
-      if ('firstName' in userData) data.firstName = userData.firstName || '';
-      if ('lastName' in userData) data.lastName = userData.lastName || '';
+      // Permitir valores vacíos para firstName, lastName y username
+      if ('email' in userData && userData.email) data.email = userData.email;
+      if ('firstName' in userData && userData.firstName !== undefined) data.firstName = userData.firstName || null;
+      if ('lastName' in userData && userData.lastName !== undefined) data.lastName = userData.lastName || null;
+      if ('username' in userData && userData.username !== undefined) data.username = userData.username || null;
       if ('profileImageUrl' in userData) data.profileImageUrl = userData.profileImageUrl;
-      if ('userType' in userData) data.userType = userData.userType || 'general';
-      if ('bio' in userData) data.bio = userData.bio;
-      if ('city' in userData) data.city = userData.city;
+      if ('userType' in userData && userData.userType) data.userType = userData.userType;
+      if ('bio' in userData && userData.bio !== undefined) data.bio = userData.bio;
+      if ('city' in userData && userData.city !== undefined) data.city = userData.city;
       if ('isVerified' in userData) data.isVerified = userData.isVerified ?? false;
-      
+
       return data;
     };
 
@@ -76,11 +79,16 @@ export class UserStorage {
     }
 
     // Crear nuevo usuario
+    // Extraer firstName del email si no se proporciona
+    const defaultFirstName = userData.email
+      ? userData.email.split('@')[0]
+      : 'Usuario';
+
     const insertData = {
       id: userData.id,
       email: userData.email || '',
-      firstName: userData.firstName || '',
-      lastName: userData.lastName || '',
+      firstName: userData.firstName || defaultFirstName,
+      lastName: userData.lastName || null,
       profileImageUrl: userData.profileImageUrl ?? null,
       userType: userData.userType || 'general',
       bio: userData.bio ?? null,
@@ -94,7 +102,7 @@ export class UserStorage {
       .insert(users)
       .values(insertData)
       .returning();
-    
+
     return newUser;
   }
 }

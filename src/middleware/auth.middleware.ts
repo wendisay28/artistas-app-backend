@@ -149,28 +149,45 @@ export const authMiddleware = async (
         .where(eq(users.id, decodedToken.uid))
         .limit(1);
 
-      let effectiveUser: any = user;
       if (!user) {
-        // Permitir que rutas protegidas creen el usuario (upsert) usando el uid del token
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('⚠️ Usuario no encontrado en DB, continuando con datos del token para permitir upsert:', decodedToken.uid);
+        // Usuario autenticado en Firebase pero no existe en nuestra BD
+        console.log('⚠️ Usuario autenticado pero no registrado en BD, creando automáticamente:', decodedToken.uid);
+        
+        // Crear el usuario automáticamente
+        try {
+          const newUser = await db.insert(users).values({
+            id: decodedToken.uid,
+            email: (decodedToken as any).email || '',
+            firstName: (decodedToken as any).name?.split(' ')[0] || 'Usuario',
+            lastName: (decodedToken as any).name?.split(' ').slice(1).join(' ') || '',
+            userType: 'general',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          }).returning();
+          
+          console.log('✅ Usuario creado automáticamente en BD');
+          
+          // Usar el usuario recién creado
+          const createdUser = newUser[0];
+          req.user = {
+            ...createdUser,
+            userType: (createdUser.userType || 'general') as 'artist' | 'general' | 'company'
+          } as UserWithId;
+        } catch (dbError: any) {
+          console.error('❌ Error al crear usuario automáticamente:', dbError.message);
+          return res.status(500).json({
+            success: false,
+            error: 'Error al crear usuario',
+            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined
+          });
         }
-        effectiveUser = {
-          id: decodedToken.uid,
-          email: (decodedToken as any).email || null,
-          userType: 'general',
-        };
+      } else {
+        // Usando type assertion para resolver temporalmente el conflicto de tipos
+        req.user = {
+          ...user,
+          userType: (user.userType || 'general') as 'artist' | 'general' | 'company'
+        } as UserWithId;
       }
-
-      const { id, email, userType, ...rest } = effectiveUser;
-
-      // Usando type assertion para resolver temporalmente el conflicto de tipos
-      req.user = {
-        id,
-        email,
-        userType: (userType || 'general') as 'artist' | 'general' | 'company',
-        ...rest
-      } as UserWithId;
 
       if (process.env.NODE_ENV === 'development') {
         console.log('✅ Usuario autenticado:', { id: req.user.id, email: req.user.email, userType: req.user.userType });

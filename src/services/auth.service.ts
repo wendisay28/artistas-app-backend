@@ -95,7 +95,15 @@ export class AuthService {
   }
 
   static async register(data: RegisterData): Promise<AuthResponse> {
-    const { email, password, firstName, lastName, userType = 'general', city } = data;
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      userType = 'general',
+      city,
+      phone
+    } = data;
 
     // Verificar si el usuario ya existe
     const [existingUser] = await db
@@ -113,15 +121,20 @@ export class AuthService {
     const userId = uuidv4();
     const now = new Date();
 
+    // Extraer nombre del email si no se proporciona firstName
+    const emailUsername = email.split('@')[0];
+    const defaultFirstName = firstName || emailUsername;
+
     // Crear objeto con los datos del nuevo usuario
     const newUserData = {
       id: userId,
       email,
       password: hashedPassword,
-      firstName,
+      firstName: defaultFirstName,
       lastName: lastName || null,
-      userType: userType as 'general' | 'artist' | 'company',
+      userType: userType as 'general' | 'artist',
       city: city || null,
+      phone: phone || null,
       isVerified: false,
       isAvailable: true,
       rating: '0.00',
@@ -132,16 +145,28 @@ export class AuthService {
       lastActive: now,
       createdAt: now,
       updatedAt: now,
+      // Campos de onboarding - usuario nuevo necesita completar onboarding
+      emailVerified: false,
+      onboardingCompleted: false,
+      onboardingStep: 'user-type-selection',
+      onboardingStartedAt: now,
       // Campos con valores por defecto
       displayName: null,
       profileImageUrl: null,
       coverImageUrl: null,
       bio: null,
       address: null,
-      phone: null,
       website: null,
       socialMedia: {},
-      isFeatured: false
+      isFeatured: false,
+      username: null,
+      shortBio: null,
+      interestedCategories: null,
+      interestedTags: null,
+      emailVerificationToken: null,
+      emailVerificationExpires: null,
+      onboardingData: null,
+      onboardingCompletedAt: null
     } as const;
 
     // Insertar nuevo usuario

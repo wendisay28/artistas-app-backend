@@ -32,6 +32,18 @@ import postRoutes from './posts.routes.js';
 // Importar rutas de elementos guardados
 import savedItemsRoutes from './saved-items.routes.js';
 
+// Importar rutas de contratos y cotizaciones
+import contractsRoutes from './contracts.routes.js';
+
+// Importar rutas de preferencias
+import preferencesRoutes from './preferences.routes.js';
+
+// Importar rutas de actividad
+import activityRoutes from './activity.routes.js';
+
+// Importar rutas de analytics
+import analyticsRoutes from './analytics.routes.js';
+
 // Importar rutas
 import authRoutes from './auth.routes.js';
 import profileRoutes from './profile.routes.js';
@@ -41,6 +53,11 @@ import explorerRoutes from './explorer.routes.js';
 import hiringRoutes from './hiring.routes.js';
 import profilePageRoutes from './profile-page.routes.js';
 import portfolioRoutes from './portfolio.routes.js';
+import companyRoutes from './company.routes.js';
+import onboardingRoutes from './onboarding.routes.js';
+import artistHierarchyRoutes from './artist-hierarchy.routes.js';
+import documentsRoutes from './documents.routes.js';
+import highlightPhotosRoutes from './highlight-photos.routes.js';
 import { storage } from '../storage/index.js';
 
 // Crear el enrutador
@@ -101,6 +118,38 @@ v1.use('/pages', pages);
 // Rutas de portafolio (perfil -> portfolio) protegidas
 v1.use('/portfolio', authMiddleware, portfolioRoutes);
 
+// Rutas de contratos y cotizaciones (protegidas)
+v1.use('/contracts', authMiddleware, contractsRoutes);
+
+// Rutas de preferencias (protegidas)
+v1.use('/preferences', authMiddleware, preferencesRoutes);
+
+// Rutas de empresas (protegidas)
+v1.use('/companies', authMiddleware, companyRoutes);
+
+// Rutas de onboarding (protegidas)
+v1.use('/onboarding', onboardingRoutes);
+
+// Rutas de actividad, notificaciones y progreso
+v1.use('/activities', activityRoutes);
+v1.use('/notifications', activityRoutes);
+v1.use('/users', activityRoutes);
+v1.use('/achievements', activityRoutes);
+v1.use('/dashboard', activityRoutes);
+v1.use('/recommendations', activityRoutes);
+
+// Rutas de analytics
+v1.use('/analytics', analyticsRoutes);
+
+// Rutas de jerarquía de artistas (Disciplinas, Roles, Especializaciones, TADs, Stats)
+v1.use('/', artistHierarchyRoutes);
+
+// Rutas de documentos (protegidas)
+v1.use('/documents', documentsRoutes);
+
+// Rutas de fotos destacadas (highlight photos)
+v1.use('/highlight-photos', highlightPhotosRoutes);
+
 // Rutas de eventos
 v1.post('/events', EventController.createEvent as RouteHandler);
 v1.put('/events/:id', EventController.updateEvent as RouteHandler);
@@ -136,6 +185,13 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
     const {
       artistName,
       categoryId,
+      // Nueva estructura jerárquica
+      disciplineId,
+      roleId,
+      specializationId,
+      additionalTalents, // Array de discipline IDs (TADs)
+      customStats, // Objeto { stat_key: value }
+      // Campos legacy
       subcategories,
       tags,
       description,
@@ -143,7 +199,23 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       isAvailable,
       stageName,
       gallery,
+      pricePerHour,
+      yearsOfExperience,
+      portfolio,
     } = req.body || {};
+
+    console.log('🔵 PUT /artist/me - req.body:', JSON.stringify({
+      stageName,
+      categoryId,
+      disciplineId,
+      roleId,
+      specializationId,
+      additionalTalents,
+      customStats,
+      tags,
+      pricePerHour,
+      yearsOfExperience,
+    }, null, 2));
 
     // Saneamiento de inputs
     const safeCategoryId = (() => {
@@ -158,6 +230,14 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       }
       return undefined;
     })();
+
+    const safeDisciplineId = typeof disciplineId === 'number' ? disciplineId : undefined;
+    const safeRoleId = typeof roleId === 'number' ? roleId : undefined;
+    const safeSpecializationId = typeof specializationId === 'number' ? specializationId : undefined;
+    const safeAdditionalTalents = Array.isArray(additionalTalents)
+      ? additionalTalents.filter((t: any) => typeof t === 'number')
+      : undefined;
+    const safeCustomStats = customStats && typeof customStats === 'object' ? customStats : undefined;
 
     const safeGallery = Array.isArray(gallery)
       ? gallery
@@ -174,13 +254,35 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       artistName,
       stageName,
       categoryId: safeCategoryId,
+      // Nueva estructura jerárquica
+      disciplineId: safeDisciplineId,
+      roleId: safeRoleId,
+      specializationId: safeSpecializationId,
+      additionalTalents: safeAdditionalTalents,
+      customStats: safeCustomStats,
+      // Campos legacy
       subcategories: Array.isArray(subcategories) ? subcategories : undefined,
       tags: Array.isArray(tags) ? tags : undefined,
       description: typeof description === 'string' ? description : undefined,
       availability: availability && typeof availability === 'object' ? availability : undefined,
       isAvailable: typeof isAvailable === 'boolean' ? isAvailable : undefined,
       gallery: safeGallery,
+      pricePerHour: typeof pricePerHour === 'number' ? pricePerHour.toString() : undefined,
+      yearsOfExperience: typeof yearsOfExperience === 'number' ? yearsOfExperience : undefined,
+      portfolio: portfolio && typeof portfolio === 'object' ? portfolio : undefined,
     };
+
+    console.log('🟢 artistPayload procesado:', JSON.stringify({
+      stageName: artistPayload.stageName,
+      categoryId: artistPayload.categoryId,
+      disciplineId: artistPayload.disciplineId,
+      roleId: artistPayload.roleId,
+      specializationId: artistPayload.specializationId,
+      additionalTalents: artistPayload.additionalTalents,
+      safeCategoryId,
+      tags: artistPayload.tags,
+      pricePerHour: artistPayload.pricePerHour,
+    }, null, 2));
 
     // Crear si no existe
     if (!existing) {
@@ -188,6 +290,12 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
         userId,
         artistName: artistPayload.artistName || 'Sin título',
         categoryId: artistPayload.categoryId ?? null,
+        // Nueva jerarquía
+        disciplineId: artistPayload.disciplineId ?? null,
+        roleId: artistPayload.roleId ?? null,
+        specializationId: artistPayload.specializationId ?? null,
+        additionalTalents: artistPayload.additionalTalents as any,
+        customStats: artistPayload.customStats as any,
         // Campos adicionales opcionales
         description: artistPayload.description,
         subcategories: artistPayload.subcategories as any,
@@ -196,6 +304,9 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
         isAvailable: artistPayload.isAvailable as any,
         stageName: artistPayload.stageName as any,
         gallery: artistPayload.gallery as any,
+        pricePerHour: artistPayload.pricePerHour as any,
+        yearsOfExperience: artistPayload.yearsOfExperience as any,
+        portfolio: artistPayload.portfolio as any,
       } as any);
       return res.json(created);
     }

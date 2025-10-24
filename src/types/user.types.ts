@@ -64,10 +64,11 @@ export interface LoginCredentials {
 export interface RegisterData {
   email: string;
   password: string;
-  firstName: string;
+  firstName?: string; // Opcional - se puede pedir en onboarding
   lastName?: string | null;
-  userType?: 'general' | 'artist' | 'company';
+  userType?: 'general' | 'artist' | 'company'; // Opcional - se decide en onboarding
   city?: string | null;
+  phone?: string | null; // Opcional - se puede pedir en onboarding
 }
 
 // Tipo para la respuesta de autenticación
