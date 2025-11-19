@@ -1,11 +1,7 @@
 import { Router } from 'express';
 import { companyController } from '../controllers/company.controller.js';
-import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const router = Router();
-
-// Todas las rutas requieren autenticación
-router.use(authMiddleware);
 
 // Obtener todas las empresas del usuario autenticado
 router.get('/my-companies', companyController.getMyCompanies);

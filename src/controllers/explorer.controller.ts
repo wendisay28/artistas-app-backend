@@ -38,9 +38,12 @@ class ExplorerController {
         conditions.push(eq(users.city, city));
       }
 
-      // Filtrar por categoría
+      // Filtrar por categoría (usando categoryId del artist)
       if (category && typeof category === 'string') {
-        conditions.push(eq(categories.name, category));
+        const categoryId = parseInt(category);
+        if (!isNaN(categoryId)) {
+          conditions.push(eq(artists.categoryId, categoryId));
+        }
       }
 
       // Búsqueda por texto

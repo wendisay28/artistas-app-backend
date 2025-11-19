@@ -46,7 +46,16 @@ function getUploadedFiles(req: Request): Express.Multer.File[] {
 const createPostSchema = z.object({
   content: z.string().min(1).max(10000),
   type: z.enum(['post', 'nota', 'blog']).default('post'),
-  isPublic: z.boolean().default(true),
+  // Coerce string "true"/"false" to boolean for FormData compatibility
+  isPublic: z.preprocess(
+    (val) => {
+      if (typeof val === 'string') {
+        return val.toLowerCase() === 'true';
+      }
+      return val;
+    },
+    z.boolean().default(true)
+  ),
 });
 
 // Crear un nuevo post
@@ -63,24 +72,31 @@ router.post(
       }
 
       const { content, type, isPublic } = req.body;
-      
+
+      console.log('📝 Creating post:', { userId, content, type, isPublic });
+
       // Subir archivos a Supabase Storage y construir metadatos
       const uploadedFiles = getUploadedFiles(req);
-      const mediaFiles = await uploadMediaFiles(uploadedFiles, 'posts');
+      console.log('📎 Uploaded files count:', uploadedFiles.length);
+
+      const mediaFiles = await uploadMediaFiles(uploadedFiles, 'posts', userId);
+      console.log('✅ Media files uploaded:', mediaFiles.length);
 
       // Usar el método estático directamente
       const post = await PostService.createPost(
-        { 
-          content, 
-          type, 
+        {
+          content,
+          type,
           isPublic,
           authorId: userId,
         },
         mediaFiles
       );
 
+      console.log('✅ Post created successfully:', post.id);
       res.status(201).json(post);
     } catch (error) {
+      console.error('❌ Error creating post:', error);
       next(error);
     }
   }

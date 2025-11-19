@@ -8,7 +8,7 @@ export class PostService {
    * Crea un nuevo post
    */
   static async createPost(postData: Omit<NewPost, 'createdAt' | 'updatedAt'>, mediaFiles?: Array<Omit<NewPostMedia, 'id' | 'postId' | 'createdAt'>>) {
-    return await db.transaction(async (tx: any) => {
+    const newPostId = await db.transaction(async (tx: any) => {
       // Insertar el post
       const [newPost] = await tx.insert(posts)
         .values({
@@ -25,27 +25,29 @@ export class PostService {
           postId: newPost.id,
           createdAt: new Date(),
         }));
-        
+
         await tx.insert(postMedia).values(postMediaData);
       }
 
-      // Obtener el post completo con sus relaciones
-      return await this.getPostById(newPost.id);
+      return newPost.id;
     });
+
+    // Obtener el post completo con sus relaciones fuera de la transacción
+    return await this.getPostById(newPostId);
   }
 
   /**
    * Obtiene un post por su ID con sus relaciones
    */
   static async getPostById(id: number) {
-    const [post] = await db
+    console.log('🔍 Getting post by ID:', id);
+
+    const result = await db
       .select({
         ...getPostFields(),
-        author: {
-          id: users.id,
-          name: sql<string>`${users.firstName} || ' ' || COALESCE(${users.lastName}, '')`,
-          avatar: users.profileImageUrl,
-        },
+        authorId: users.id,
+        authorName: sql<string>`${users.firstName} || ' ' || COALESCE(${users.lastName}, '')`,
+        authorAvatar: users.profileImageUrl,
         media: sql<Array<{ id: number; url: string; type: string; thumbnailUrl: string | null }>>`
           COALESCE(
             (
@@ -55,11 +57,10 @@ export class PostService {
                   'url', pm.url,
                   'type', pm.type,
                   'thumbnailUrl', pm.thumbnail_url
-                )
+                ) ORDER BY pm."order" ASC, pm.id ASC
               )
               FROM post_media pm
               WHERE pm.post_id = posts.id
-              ORDER BY pm.order ASC, pm.id ASC
             ),
             '[]'::json
           )
@@ -69,7 +70,30 @@ export class PostService {
       .leftJoin(users, eq(posts.authorId, users.id))
       .where(eq(posts.id, id));
 
-    return post || null;
+    console.log('📦 Query result:', { count: result.length, firstPost: result[0] });
+
+    if (result.length === 0) {
+      return null;
+    }
+
+    // Transformar el resultado para incluir el objeto author
+    const rawPost = result[0];
+    const post = {
+      ...rawPost,
+      author: {
+        id: rawPost.authorId,
+        name: rawPost.authorName,
+        avatar: rawPost.authorAvatar,
+      }
+    };
+
+    // Eliminar los campos temporales
+    delete (post as any).authorId;
+    delete (post as any).authorName;
+    delete (post as any).authorAvatar;
+
+    console.log('✅ Transformed post:', post);
+    return post;
   }
 
   /**
@@ -79,11 +103,9 @@ export class PostService {
     const query = db
       .select({
         ...getPostFields(),
-        author: {
-          id: users.id,
-          name: sql<string>`${users.firstName} || ' ' || COALESCE(${users.lastName}, '')`,
-          avatar: users.profileImageUrl,
-        },
+        authorId: users.id,
+        authorName: sql<string>`${users.firstName} || ' ' || COALESCE(${users.lastName}, '')`,
+        authorAvatar: users.profileImageUrl,
         media: sql<Array<{ id: number; url: string; type: string; thumbnailUrl: string | null }>>`
           COALESCE(
             (
@@ -93,11 +115,10 @@ export class PostService {
                   'url', pm.url,
                   'type', pm.type,
                   'thumbnailUrl', pm.thumbnail_url
-                )
+                ) ORDER BY pm."order" ASC, pm.id ASC
               )
               FROM post_media pm
               WHERE pm.post_id = posts.id
-              ORDER BY pm.order ASC, pm.id ASC
             ),
             '[]'::json
           )
@@ -123,12 +144,25 @@ export class PostService {
       totalQuery.where(eq(posts.type, type));
     }
 
-    const [postsResult, totalResult] = await Promise.all([
+    const [rawPostsResult, totalResult] = await Promise.all([
       query,
       totalQuery
     ]);
 
     const total = totalResult[0]?.count || 0;
+
+    // Transformar los resultados para incluir el objeto author
+    const postsResult = rawPostsResult.map(rawPost => {
+      const { authorId, authorName, authorAvatar, ...rest } = rawPost as any;
+      return {
+        ...rest,
+        author: {
+          id: authorId,
+          name: authorName,
+          avatar: authorAvatar,
+        }
+      };
+    });
 
     return {
       posts: postsResult,
@@ -142,14 +176,12 @@ export class PostService {
    * Obtiene los posts de un usuario específico
    */
   static async getPostsByUser(userId: string, limit = 10, offset = 0) {
-    return await db
+    const rawResult = await db
       .select({
         ...getPostFields(),
-        author: {
-          id: users.id,
-          name: sql<string>`${users.firstName} || ' ' || COALESCE(${users.lastName}, '')`,
-          avatar: users.profileImageUrl,
-        },
+        authorId: users.id,
+        authorName: sql<string>`${users.firstName} || ' ' || COALESCE(${users.lastName}, '')`,
+        authorAvatar: users.profileImageUrl,
         media: sql<Array<{ id: number; url: string; type: string; thumbnailUrl: string | null }>>`
           COALESCE(
             (
@@ -159,11 +191,10 @@ export class PostService {
                   'url', pm.url,
                   'type', pm.type,
                   'thumbnailUrl', pm.thumbnail_url
-                )
+                ) ORDER BY pm."order" ASC, pm.id ASC
               )
               FROM post_media pm
               WHERE pm.post_id = posts.id
-              ORDER BY pm.order ASC, pm.id ASC
             ),
             '[]'::json
           )
@@ -175,6 +206,19 @@ export class PostService {
       .orderBy(desc(posts.createdAt))
       .limit(limit)
       .offset(offset);
+
+    // Transformar los resultados para incluir el objeto author
+    return rawResult.map(rawPost => {
+      const { authorId, authorName, authorAvatar, ...rest } = rawPost as any;
+      return {
+        ...rest,
+        author: {
+          id: authorId,
+          name: authorName,
+          avatar: authorAvatar,
+        }
+      };
+    });
   }
 
   /**

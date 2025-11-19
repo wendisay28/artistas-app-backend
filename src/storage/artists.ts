@@ -162,6 +162,15 @@ export class ArtistStorage {
       artistName?: string;
       stageName?: string | null;
       gallery?: unknown[];
+      yearsOfExperience?: number | null;
+      baseCity?: string | null;
+      // Nuevos campos de perfil profesional
+      education?: unknown[] | null;
+      languages?: unknown[] | null;
+      hourlyRate?: number | null;
+      pricingType?: 'hourly' | 'deliverable' | 'depends' | null;
+      licenses?: unknown[] | null;
+      linkedAccounts?: Record<string, unknown> | null;
     }
   ) {
     const [artist] = await this.db

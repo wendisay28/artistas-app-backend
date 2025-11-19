@@ -75,6 +75,11 @@ import onboardingRoutes from './onboarding.routes.js';
 import artistHierarchyRoutes from './artist-hierarchy.routes.js';
 import documentsRoutes from './documents.routes.js';
 import highlightPhotosRoutes from './highlight-photos.routes.js';
+import blogRoutes from './blog.routes.js';
+import servicesRoutes from './services.routes.js';
+import storeRoutes from './store.routes.js';
+import campaignsRoutes from './campaigns.routes.js';
+import bookingsRoutes from './bookings.routes.js';
 import { storage } from '../storage/index.js';
 
 // Crear el enrutador
@@ -141,6 +146,7 @@ v1.use('/contracts', authMiddleware, contractsRoutes);
 v1.use('/preferences', authMiddleware, preferencesRoutes);
 
 // Rutas de empresas (protegidas)
+console.log('🔍 Registrando rutas de companies:', companyRoutes);
 v1.use('/companies', authMiddleware, companyRoutes);
 
 // Rutas de onboarding (protegidas)
@@ -148,11 +154,13 @@ v1.use('/onboarding', onboardingRoutes);
 
 // Rutas de actividad, notificaciones y progreso
 v1.use('/activities', activityRoutes);
-v1.use('/notifications', activityRoutes);
-v1.use('/users', activityRoutes);
+// v1.use('/notifications', activityRoutes); // REMOVIDO: Las rutas de notificaciones tienen el prefijo completo
 v1.use('/achievements', activityRoutes);
 v1.use('/dashboard', activityRoutes);
 v1.use('/activity', activityRoutes);
+// NO montar activityRoutes en raíz porque captura todas las rutas
+// Las rutas como /users/:userId/follow, /notifications, /profile/* están definidas con path completo en activityRoutes
+// y se acceden directamente sin prefijo adicional
 
 // Rutas de analytics
 v1.use('/analytics', analyticsRoutes);
@@ -183,6 +191,21 @@ v1.use('/documents', documentsRoutes);
 
 // Rutas de fotos destacadas (highlight photos)
 v1.use('/highlight-photos', highlightPhotosRoutes);
+
+// Rutas de blog (parcialmente protegidas)
+v1.use('/blog', blogRoutes);
+
+// Rutas de servicios (parcialmente protegidas)
+v1.use('/services', servicesRoutes);
+
+// Rutas de tienda/productos (parcialmente protegidas)
+v1.use('/store', storeRoutes);
+
+// Rutas de campañas (protegidas)
+v1.use('/campaigns', campaignsRoutes);
+
+// Rutas de reservas/bookings (protegidas)
+v1.use('/bookings', bookingsRoutes);
 
 // Nota: Las rutas de eventos están definidas en events.routes.ts
 // Las rutas duplicadas fueron removidas para evitar conflictos
@@ -373,6 +396,11 @@ v1.use(protectedRoutes);
 
 // Rutas públicas de usuario (después de las protegidas para evitar conflictos)
 v1.get('/users/:userId', userController.getPublicProfile as RouteHandler);
+
+// Montar activityRoutes sin prefijo para rutas con paths completos
+// (como /users/:userId/follow, /notifications, /profile/*, /recommendations/*)
+// Se monta al final para no interferir con rutas más específicas definidas arriba
+v1.use(activityRoutes);
 
 // Usar rutas de la API v1 con prefijo /api/v1 (único punto de entrada)
 router.use('/v1', v1);

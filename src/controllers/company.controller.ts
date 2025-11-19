@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { storage } from '../storage/index.js';
 import { eq, and } from 'drizzle-orm';
-import { companies } from '../schema.js';
+import { companies, venues } from '../schema.js';
 
 export const companyController = {
   // Obtener todas las empresas del usuario autenticado
@@ -213,6 +213,45 @@ export const companyController = {
         })
         .returning();
 
+      // Crear automáticamente un venue para que la empresa aparezca en el explorador
+      const multimedia = {
+        logo: logoUrl,
+        cover: coverPhotoUrl,
+        gallery: gallery || [],
+        video: videoTourUrl,
+      };
+
+      const contact = {
+        phone,
+        email,
+        website,
+        ...(socialMedia || {}),
+      };
+
+      const dailyRate = priceRange?.min || depositAmount || 0;
+
+      await storage.db
+        .insert(venues)
+        .values({
+          companyId: newCompany[0].id,
+          name: companyName,
+          description: description || shortDescription,
+          venueType: companyType,
+          services: tags || [],
+          address,
+          city,
+          openingHours: openingHours || {},
+          contact,
+          multimedia,
+          coordinates,
+          dailyRate,
+          capacity,
+          isAvailable: true,
+          rating: 0,
+          totalReviews: 0,
+        });
+
+      console.log(`✅ Empresa y venue creados exitosamente para ${companyName}`);
       return res.status(201).json(newCompany[0]);
     } catch (error) {
       console.error('Error al crear empresa:', error);
@@ -268,6 +307,53 @@ export const companyController = {
         })
         .where(eq(companies.id, parseInt(id)))
         .returning();
+
+      // Actualizar también el venue asociado si hay cambios relevantes
+      const venueUpdateData: any = {};
+
+      if (updateData.companyName) venueUpdateData.name = updateData.companyName;
+      if (updateData.description || updateData.shortDescription) {
+        venueUpdateData.description = updateData.description || updateData.shortDescription;
+      }
+      if (updateData.companyType) venueUpdateData.venueType = updateData.companyType;
+      if (updateData.tags) venueUpdateData.services = updateData.tags;
+      if (updateData.address) venueUpdateData.address = updateData.address;
+      if (updateData.city) venueUpdateData.city = updateData.city;
+      if (updateData.openingHours) venueUpdateData.openingHours = updateData.openingHours;
+      if (updateData.coordinates) venueUpdateData.coordinates = updateData.coordinates;
+      if (updateData.capacity) venueUpdateData.capacity = updateData.capacity;
+
+      // Actualizar multimedia si hay cambios
+      const multimedia: any = {};
+      if (updateData.logoUrl) multimedia.logo = updateData.logoUrl;
+      if (updateData.coverPhotoUrl) multimedia.cover = updateData.coverPhotoUrl;
+      if (updateData.gallery) multimedia.gallery = updateData.gallery;
+      if (updateData.videoTourUrl) multimedia.video = updateData.videoTourUrl;
+      if (Object.keys(multimedia).length > 0) venueUpdateData.multimedia = multimedia;
+
+      // Actualizar contacto si hay cambios
+      const contact: any = {};
+      if (updateData.phone) contact.phone = updateData.phone;
+      if (updateData.email) contact.email = updateData.email;
+      if (updateData.website) contact.website = updateData.website;
+      if (updateData.socialMedia) Object.assign(contact, updateData.socialMedia);
+      if (Object.keys(contact).length > 0) venueUpdateData.contact = contact;
+
+      // Actualizar tarifa diaria si hay cambios
+      if (updateData.priceRange?.min || updateData.depositAmount) {
+        venueUpdateData.dailyRate = updateData.priceRange?.min || updateData.depositAmount;
+      }
+
+      // Solo actualizar el venue si hay cambios
+      if (Object.keys(venueUpdateData).length > 0) {
+        venueUpdateData.updatedAt = new Date();
+        await storage.db
+          .update(venues)
+          .set(venueUpdateData)
+          .where(eq(venues.companyId, parseInt(id)));
+
+        console.log(`✅ Venue actualizado para la empresa ${id}`);
+      }
 
       return res.json(updatedCompany[0]);
     } catch (error) {

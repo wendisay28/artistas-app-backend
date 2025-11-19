@@ -9,7 +9,7 @@ export type MediaMeta = {
   path?: string; // Path del archivo en storage para poder eliminarlo después
 };
 
-export type BucketType = 'posts' | 'services' | 'products' | 'portfolios' | 'avatars';
+export type BucketType = 'posts' | 'services' | 'products' | 'portfolios' | 'avatars' | 'blog' | 'gallery' | 'store';
 
 /**
  * Sube múltiples archivos de medios a Supabase Storage
@@ -22,6 +22,7 @@ export async function uploadMediaFiles(
   bucket: BucketType,
   userId?: string
 ): Promise<MediaMeta[]> {
+  console.log(`📤 Uploading ${files.length} files to bucket: ${bucket}`);
   const mediaFiles: MediaMeta[] = [];
 
   for (let i = 0; i < files.length; i++) {
@@ -34,15 +35,20 @@ export async function uploadMediaFiles(
       ? `${userId}/${fileName}`
       : `${fileName}`;
 
+    console.log(`📎 Uploading file ${i + 1}/${files.length}: ${filePath} (${file.mimetype}, ${file.size} bytes)`);
+
     const { data, error } = await uploadFile(bucket, filePath, file.buffer, {
       contentType: file.mimetype,
       upsert: false,
     });
 
     if (error) {
-      console.error(`Error uploading file to ${bucket}/${filePath}:`, error);
+      console.error(`❌ Error uploading file to ${bucket}/${filePath}:`, error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
       throw new Error(`Error al subir archivo: ${error.message}`);
     }
+
+    console.log(`✅ File uploaded successfully: ${data?.path}`);
 
     const publicUrl = getPublicUrl(bucket, data?.path || filePath);
     mediaFiles.push({
@@ -54,6 +60,7 @@ export async function uploadMediaFiles(
     });
   }
 
+  console.log(`✅ All files uploaded successfully: ${mediaFiles.length} files`);
   return mediaFiles;
 }
 
