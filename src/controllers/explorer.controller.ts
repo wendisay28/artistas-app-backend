@@ -1036,32 +1036,32 @@ class ExplorerController {
         return res.json([]);
       }
 
-      const searchQuery = q.trim().toLowerCase();
+      const searchQuery = `%${q.trim()}%`;
       const limitNum = Math.min(parseInt(limit as string) || 5, 20);
 
-      const results = await db
-        .select({
-          id: artists.id,
-          userId: users.id,
-          name: users.displayName,
-          profession: artists.professionalTitle,
-          category: artists.category,
-          profileImageUrl: users.profileImageUrl,
-        })
-        .from(artists)
-        .leftJoin(users, eq(artists.userId, users.id))
-        .where(
-          or(
-            ilike(users.displayName, `%${searchQuery}%`),
-            ilike(users.firstName, `%${searchQuery}%`),
-            ilike(users.lastName, `%${searchQuery}%`),
-            ilike(artists.professionalTitle, `%${searchQuery}%`),
-            sql`CONCAT(${users.firstName}, ' ', ${users.lastName}) ILIKE ${'%' + searchQuery + '%'}`
-          )
-        )
-        .limit(limitNum);
+      // Usar SQL directo para evitar problemas con NULLs
+      const results = await db.execute(sql`
+        SELECT
+          a.id,
+          u.id as "userId",
+          COALESCE(u.display_name, u.first_name || ' ' || COALESCE(u.last_name, ''), a.artist_name, 'Artista') as name,
+          a.stage_name as profession,
+          c.code as category,
+          u.profile_image_url as "profileImageUrl"
+        FROM artists a
+        LEFT JOIN users u ON a.user_id = u.id
+        LEFT JOIN categories c ON a.category_id = c.id
+        WHERE
+          u.display_name ILIKE ${searchQuery} OR
+          u.first_name ILIKE ${searchQuery} OR
+          u.last_name ILIKE ${searchQuery} OR
+          a.artist_name ILIKE ${searchQuery} OR
+          a.stage_name ILIKE ${searchQuery} OR
+          (u.first_name || ' ' || COALESCE(u.last_name, '')) ILIKE ${searchQuery}
+        LIMIT ${limitNum}
+      `);
 
-      res.json(results);
+      res.json((results as any).rows || results);
     } catch (error: any) {
       console.error('Error searching artists:', error);
       res.status(500).json({ message: 'Error al buscar artistas', error: error.message });

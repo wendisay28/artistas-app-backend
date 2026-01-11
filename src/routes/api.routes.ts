@@ -145,10 +145,15 @@ v1.use('/posts', postRoutes);
 // Rutas sociales
 v1.use('/', socialRoutes);
 
+// Rutas de explorer (públicas - antes del middleware)
+v1.use('/explorer', explorerRoutes);
+
+// Rutas públicas de búsqueda
+v1.get('/users/search', userController.searchUsers as RouteHandler);
+
 // Rutas por páginas (estructura limpia por secciones de la app)
 const pages = Router();
 pages.use('/home', homeRoutes);
-pages.use('/explorer', explorerRoutes);
 pages.use('/hiring', hiringRoutes);
 pages.use('/profile', profilePageRoutes);
 v1.use('/pages', pages);
@@ -485,12 +490,11 @@ v1.get('/profiles/:id/reviews', profileController.getReviews as RouteHandler);
 // Ruta pública de perfil completo (con trabajos destacados)
 v1.get('/profile/public/:id', profileController.getPublic as RouteHandler);
 
+// Rutas públicas de usuario
+v1.get('/users/:userId', userController.getPublicProfile as RouteHandler);
+
 // Montar rutas protegidas en v1
 v1.use(protectedRoutes);
-
-// Rutas públicas de usuario (después de las protegidas para evitar conflictos)
-v1.get('/users/search', userController.searchUsers as RouteHandler);
-v1.get('/users/:userId', userController.getPublicProfile as RouteHandler);
 
 // DISABLED: Montar activityRoutes sin prefijo para rutas con paths completos
 // (como /users/:userId/follow, /notifications, /profile/*, /recommendations/*)
