@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS "inspirations" (
   "post_id" INTEGER NOT NULL REFERENCES "posts"("id") ON DELETE CASCADE,
   "inspiration_note" TEXT,
   "tags" TEXT[] DEFAULT '{}',
-  "inspiration_type" VARCHAR CHECK ("inspiration_type" IN ('technique', 'composition', 'color', 'style', 'concept', 'other')),
+  "inspiration_type" VARCHAR CHECK ("inspiration_type" IS NULL OR "inspiration_type" IN ('technique', 'composition', 'color', 'style', 'concept', 'other')),
   "created_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   "updated_at" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

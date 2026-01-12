@@ -271,9 +271,9 @@ export const collectionsStorage = {
       .values({
         userId: data.userId,
         postId: data.postId,
-        inspirationNote: data.inspirationNote,
+        inspirationNote: data.inspirationNote || null,
         tags: data.tags || [],
-        inspirationType: data.inspirationType,
+        inspirationType: data.inspirationType || null,
       })
       .onConflictDoNothing()
       .returning();
@@ -293,12 +293,23 @@ export const collectionsStorage = {
       inspirationType?: string;
     }
   ) {
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (data.inspirationNote !== undefined) {
+      updateData.inspirationNote = data.inspirationNote || null;
+    }
+    if (data.tags !== undefined) {
+      updateData.tags = data.tags;
+    }
+    if (data.inspirationType !== undefined) {
+      updateData.inspirationType = data.inspirationType || null;
+    }
+
     const result = await db
       .update(inspirations)
-      .set({
-        ...data,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(
         and(
           eq(inspirations.id, id),
