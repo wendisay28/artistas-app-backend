@@ -139,6 +139,7 @@ export const collectionsStorage = {
     collectionId: number;
     postId: number;
     userId: string;
+    postType?: string; // 'post' or 'blog'
     notes?: string;
   }) {
     // Verificar que la colección pertenezca al usuario
@@ -147,35 +148,44 @@ export const collectionsStorage = {
       throw new Error('Collection not found or does not belong to user');
     }
 
-    // Insertar el item
-    const result = await db
-      .insert(collectionItems)
-      .values({
-        collectionId: data.collectionId,
-        postId: data.postId,
-        notes: data.notes,
-      })
-      .onConflictDoNothing()
-      .returning();
-
-    // Actualizar contador
-    if (result.length > 0) {
-      await db
-        .update(collections)
-        .set({
-          itemCount: sql`${collections.itemCount} + 1`,
-          updatedAt: new Date(),
+    try {
+      // Insertar el item
+      const result = await db
+        .insert(collectionItems)
+        .values({
+          collectionId: data.collectionId,
+          postId: data.postId,
+          postType: data.postType || 'post',
+          notes: data.notes,
         })
-        .where(eq(collections.id, data.collectionId));
-    }
+        .onConflictDoNothing()
+        .returning();
 
-    return result[0] || null;
+      // Actualizar contador
+      if (result.length > 0) {
+        await db
+          .update(collections)
+          .set({
+            itemCount: sql`${collections.itemCount} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(collections.id, data.collectionId));
+      }
+
+      return result[0] || null;
+    } catch (error: any) {
+      // Check if it's a foreign key constraint error
+      if (error.code === '23503' && error.constraint_name === 'collection_items_post_id_fkey') {
+        throw new Error('POST_NOT_FOUND');
+      }
+      throw error;
+    }
   },
 
   /**
    * Quitar un post de una colección
    */
-  async removePostFromCollection(collectionId: number, postId: number, userId: string) {
+  async removePostFromCollection(collectionId: number, postId: number, userId: string, postType: string = 'post') {
     // Verificar que la colección pertenezca al usuario
     const collection = await this.getCollectionById(collectionId, userId);
     if (!collection) {
@@ -187,7 +197,8 @@ export const collectionsStorage = {
       .where(
         and(
           eq(collectionItems.collectionId, collectionId),
-          eq(collectionItems.postId, postId)
+          eq(collectionItems.postId, postId),
+          eq(collectionItems.postType, postType)
         )
       );
 
@@ -204,7 +215,7 @@ export const collectionsStorage = {
   /**
    * Verificar si un post está en alguna colección del usuario
    */
-  async isPostInCollections(userId: string, postId: number) {
+  async isPostInCollections(userId: string, postId: number, postType: string = 'post') {
     const userCollections = await this.getUserCollections(userId);
     const collectionIds = userCollections.map(c => c.id);
 
@@ -220,6 +231,7 @@ export const collectionsStorage = {
       .where(
         and(
           eq(collectionItems.postId, postId),
+          eq(collectionItems.postType, postType),
           eq(collections.userId, userId)
         )
       );
@@ -262,6 +274,7 @@ export const collectionsStorage = {
   async addInspiration(data: {
     userId: string;
     postId: number;
+    postType?: string; // 'post' or 'blog'
     inspirationNote?: string;
     tags?: string[];
     inspirationType?: string;
@@ -271,6 +284,7 @@ export const collectionsStorage = {
       .values({
         userId: data.userId,
         postId: data.postId,
+        postType: data.postType || 'post',
         inspirationNote: data.inspirationNote || null,
         tags: data.tags || [],
         inspirationType: data.inspirationType || null,
@@ -324,13 +338,14 @@ export const collectionsStorage = {
   /**
    * Quitar una inspiración
    */
-  async removeInspiration(userId: string, postId: number) {
+  async removeInspiration(userId: string, postId: number, postType: string = 'post') {
     await db
       .delete(inspirations)
       .where(
         and(
           eq(inspirations.userId, userId),
-          eq(inspirations.postId, postId)
+          eq(inspirations.postId, postId),
+          eq(inspirations.postType, postType)
         )
       );
   },
@@ -338,14 +353,15 @@ export const collectionsStorage = {
   /**
    * Verificar si un post está marcado como inspiración
    */
-  async isPostInspiration(userId: string, postId: number) {
+  async isPostInspiration(userId: string, postId: number, postType: string = 'post') {
     const result = await db
       .select()
       .from(inspirations)
       .where(
         and(
           eq(inspirations.userId, userId),
-          eq(inspirations.postId, postId)
+          eq(inspirations.postId, postId),
+          eq(inspirations.postType, postType)
         )
       )
       .limit(1);

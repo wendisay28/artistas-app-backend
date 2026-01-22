@@ -1312,7 +1312,8 @@ export const collections = pgTable('collections', {
 export const collectionItems = pgTable('collection_items', {
   id: serial('id').primaryKey(),
   collectionId: integer('collection_id').notNull().references(() => collections.id, { onDelete: 'cascade' }),
-  postId: integer('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+  postId: integer('post_id').notNull(), // ID del post (puede ser de posts o blog_posts)
+  postType: varchar('post_type', { length: 20 }).notNull().default('post'), // 'post' o 'blog'
 
   // Notas personales del usuario sobre este item
   notes: text('notes'),
@@ -1320,8 +1321,8 @@ export const collectionItems = pgTable('collection_items', {
   // Timestamps
   addedAt: timestamp('added_at').default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
-  // Índice único para evitar duplicados
-  collectionPostIdx: uniqueIndex('collection_post_idx').on(table.collectionId, table.postId),
+  // Índice único para evitar duplicados (considerando tipo de post)
+  collectionPostIdx: uniqueIndex('collection_post_idx').on(table.collectionId, table.postId, table.postType),
 }));
 
 // ============================================================================
@@ -1332,7 +1333,8 @@ export const collectionItems = pgTable('collection_items', {
 export const inspirations = pgTable('inspirations', {
   id: serial('id').primaryKey(),
   userId: varchar('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  postId: integer('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+  postId: integer('post_id').notNull(), // ID del post (puede ser de posts o blog_posts)
+  postType: varchar('post_type', { length: 20 }).notNull().default('post'), // 'post' o 'blog'
 
   // Por qué les inspiró
   inspirationNote: text('inspiration_note'),
@@ -1349,6 +1351,6 @@ export const inspirations = pgTable('inspirations', {
   createdAt: timestamp('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp('updated_at').default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
-  // Índice único para evitar duplicados
-  userPostIdx: uniqueIndex('inspiration_user_post_idx').on(table.userId, table.postId),
+  // Índice único para evitar duplicados (considerando tipo de post)
+  userPostIdx: uniqueIndex('inspiration_user_post_idx').on(table.userId, table.postId, table.postType),
 }));

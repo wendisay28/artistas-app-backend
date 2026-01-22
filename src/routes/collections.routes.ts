@@ -14,7 +14,7 @@ const router = Router();
  */
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const collections = await collectionsStorage.getUserCollections(userId);
     res.json(collections);
   } catch (error) {
@@ -29,7 +29,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const collectionId = parseInt(req.params.id);
 
     const collection = await collectionsStorage.getCollectionById(collectionId, userId);
@@ -51,7 +51,12 @@ router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
  */
 router.post('/', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const { name, description, isPublic, coverImageUrl } = req.body;
 
     if (!name) {
@@ -79,7 +84,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
  */
 router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const collectionId = parseInt(req.params.id);
     const { name, description, isPublic, coverImageUrl } = req.body;
 
@@ -106,7 +111,7 @@ router.put('/:id', authMiddleware, async (req: Request, res: Response) => {
  */
 router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const collectionId = parseInt(req.params.id);
 
     await collectionsStorage.deleteCollection(collectionId, userId);
@@ -123,7 +128,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
  */
 router.get('/:id/posts', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const collectionId = parseInt(req.params.id);
 
     const posts = await collectionsStorage.getCollectionPosts(collectionId, userId);
@@ -140,9 +145,14 @@ router.get('/:id/posts', authMiddleware, async (req: Request, res: Response) => 
  */
 router.post('/:id/posts', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const collectionId = parseInt(req.params.id);
-    const { postId, notes } = req.body;
+    const { postId, postType, notes } = req.body;
 
     if (!postId) {
       return res.status(400).json({ error: 'Post ID is required' });
@@ -151,6 +161,7 @@ router.post('/:id/posts', authMiddleware, async (req: Request, res: Response) =>
     const item = await collectionsStorage.addPostToCollection({
       collectionId,
       postId,
+      postType: postType || 'post',
       userId,
       notes,
     });
@@ -160,8 +171,11 @@ router.post('/:id/posts', authMiddleware, async (req: Request, res: Response) =>
     }
 
     res.status(201).json(item);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding post to collection:', error);
+    if (error.message === 'POST_NOT_FOUND') {
+      return res.status(404).json({ error: 'El post no existe o fue eliminado' });
+    }
     res.status(500).json({ error: 'Error adding post to collection' });
   }
 });
@@ -172,11 +186,12 @@ router.post('/:id/posts', authMiddleware, async (req: Request, res: Response) =>
  */
 router.delete('/:id/posts/:postId', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const collectionId = parseInt(req.params.id);
     const postId = parseInt(req.params.postId);
+    const postType = req.query.postType as string || 'post';
 
-    await collectionsStorage.removePostFromCollection(collectionId, postId, userId);
+    await collectionsStorage.removePostFromCollection(collectionId, postId, userId, postType);
     res.status(204).send();
   } catch (error) {
     console.error('Error removing post from collection:', error);
@@ -190,10 +205,11 @@ router.delete('/:id/posts/:postId', authMiddleware, async (req: Request, res: Re
  */
 router.get('/posts/:postId/check', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const postId = parseInt(req.params.postId);
+    const postType = req.query.postType as string || 'post';
 
-    const collections = await collectionsStorage.isPostInCollections(userId, postId);
+    const collections = await collectionsStorage.isPostInCollections(userId, postId, postType);
     res.json({ inCollections: collections });
   } catch (error) {
     console.error('Error checking post in collections:', error);
@@ -211,7 +227,7 @@ router.get('/posts/:postId/check', authMiddleware, async (req: Request, res: Res
  */
 router.get('/inspirations', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const { inspirationType, tags } = req.query;
 
     const filters: any = {};
@@ -232,8 +248,13 @@ router.get('/inspirations', authMiddleware, async (req: Request, res: Response) 
  */
 router.post('/inspirations', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
-    const { postId, inspirationNote, tags, inspirationType } = req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const { postId, postType, inspirationNote, tags, inspirationType } = req.body;
 
     if (!postId) {
       return res.status(400).json({ error: 'Post ID is required' });
@@ -242,6 +263,7 @@ router.post('/inspirations', authMiddleware, async (req: Request, res: Response)
     const inspiration = await collectionsStorage.addInspiration({
       userId,
       postId,
+      postType: postType || 'post',
       inspirationNote,
       tags,
       inspirationType,
@@ -252,8 +274,11 @@ router.post('/inspirations', authMiddleware, async (req: Request, res: Response)
     }
 
     res.status(201).json(inspiration);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error adding inspiration:', error);
+    if (error.message === 'POST_NOT_FOUND') {
+      return res.status(404).json({ error: 'El post no existe o fue eliminado' });
+    }
     res.status(500).json({ error: 'Error adding inspiration' });
   }
 });
@@ -264,7 +289,7 @@ router.post('/inspirations', authMiddleware, async (req: Request, res: Response)
  */
 router.put('/inspirations/:id', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const inspirationId = parseInt(req.params.id);
     const { inspirationNote, tags, inspirationType } = req.body;
 
@@ -291,10 +316,11 @@ router.put('/inspirations/:id', authMiddleware, async (req: Request, res: Respon
  */
 router.delete('/inspirations/posts/:postId', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const postId = parseInt(req.params.postId);
+    const postType = req.query.postType as string || 'post';
 
-    await collectionsStorage.removeInspiration(userId, postId);
+    await collectionsStorage.removeInspiration(userId, postId, postType);
     res.status(204).send();
   } catch (error) {
     console.error('Error removing inspiration:', error);
@@ -308,10 +334,11 @@ router.delete('/inspirations/posts/:postId', authMiddleware, async (req: Request
  */
 router.get('/inspirations/posts/:postId/check', authMiddleware, async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
+    const userId = req.user?.id;
     const postId = parseInt(req.params.postId);
+    const postType = req.query.postType as string || 'post';
 
-    const inspiration = await collectionsStorage.isPostInspiration(userId, postId);
+    const inspiration = await collectionsStorage.isPostInspiration(userId, postId, postType);
     res.json({ isInspiration: !!inspiration, inspiration });
   } catch (error) {
     console.error('Error checking inspiration:', error);
