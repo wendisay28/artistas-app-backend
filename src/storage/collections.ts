@@ -1,6 +1,6 @@
 import { db } from '../db.js';
-import { collections, collectionItems, inspirations, posts } from '../schema.js';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { collections, collectionItems, inspirations, posts, blogPosts, users } from '../schema.js';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 
 export const collectionsStorage = {
   // ============================================================================
@@ -110,17 +110,17 @@ export const collectionsStorage = {
    * Obtener posts de una colección
    */
   async getCollectionPosts(collectionId: number, userId: string) {
+    // Primero obtener todos los collection items con sus tipos
     const items = await db
       .select({
         id: collectionItems.id,
         postId: collectionItems.postId,
+        postType: collectionItems.postType,
         notes: collectionItems.notes,
         addedAt: collectionItems.addedAt,
-        post: posts,
       })
       .from(collectionItems)
       .innerJoin(collections, eq(collectionItems.collectionId, collections.id))
-      .innerJoin(posts, eq(collectionItems.postId, posts.id))
       .where(
         and(
           eq(collectionItems.collectionId, collectionId),
@@ -129,7 +129,81 @@ export const collectionsStorage = {
       )
       .orderBy(desc(collectionItems.addedAt));
 
-    return items;
+    if (items.length === 0) {
+      return [];
+    }
+
+    // Separar los IDs por tipo
+    const regularPostIds = items.filter(item => item.postType === 'post').map(item => item.postId);
+    const blogPostIds = items.filter(item => item.postType === 'blog').map(item => item.postId);
+
+    // Obtener los posts regulares
+    let regularPosts: any[] = [];
+    if (regularPostIds.length > 0) {
+      regularPosts = await db
+        .select({
+          post: posts,
+          author: users,
+        })
+        .from(posts)
+        .leftJoin(users, eq(posts.userId, users.id))
+        .where(inArray(posts.id, regularPostIds));
+    }
+
+    // Obtener los blog posts
+    let blogPostsData: any[] = [];
+    if (blogPostIds.length > 0) {
+      blogPostsData = await db
+        .select({
+          post: blogPosts,
+          author: users,
+        })
+        .from(blogPosts)
+        .leftJoin(users, eq(blogPosts.authorId, users.id))
+        .where(inArray(blogPosts.id, blogPostIds));
+    }
+
+    // Combinar los resultados manteniendo el orden original
+    const result = items.map(item => {
+      let postData;
+
+      if (item.postType === 'post') {
+        const found = regularPosts.find(p => p.post.id === item.postId);
+        if (found) {
+          postData = {
+            ...found.post,
+            type: 'post',
+            author: found.author,
+            userId: found.post.userId,
+          };
+        }
+      } else if (item.postType === 'blog') {
+        const found = blogPostsData.find(p => p.post.id === item.postId);
+        if (found) {
+          postData = {
+            ...found.post,
+            type: 'blog',
+            author: found.author,
+            userId: found.post.authorId,
+          };
+        }
+      }
+
+      if (!postData) {
+        return null;
+      }
+
+      return {
+        id: item.id,
+        postId: item.postId,
+        postType: item.postType,
+        notes: item.notes,
+        addedAt: item.addedAt,
+        post: postData,
+      };
+    }).filter(item => item !== null);
+
+    return result;
   },
 
   /**
@@ -250,22 +324,100 @@ export const collectionsStorage = {
     inspirationType?: string;
     tags?: string[];
   }) {
-    let query = db
+    // Primero obtener todas las inspiraciones con sus tipos
+    const items = await db
       .select({
         id: inspirations.id,
         postId: inspirations.postId,
+        postType: inspirations.postType,
         inspirationNote: inspirations.inspirationNote,
         tags: inspirations.tags,
         inspirationType: inspirations.inspirationType,
         createdAt: inspirations.createdAt,
-        post: posts,
+        updatedAt: inspirations.updatedAt,
       })
       .from(inspirations)
-      .innerJoin(posts, eq(inspirations.postId, posts.id))
       .where(eq(inspirations.userId, userId))
       .orderBy(desc(inspirations.createdAt));
 
-    return await query;
+    if (items.length === 0) {
+      return [];
+    }
+
+    // Separar los IDs por tipo
+    const regularPostIds = items.filter(item => item.postType === 'post').map(item => item.postId);
+    const blogPostIds = items.filter(item => item.postType === 'blog').map(item => item.postId);
+
+    // Obtener los posts regulares
+    let regularPosts: any[] = [];
+    if (regularPostIds.length > 0) {
+      regularPosts = await db
+        .select({
+          post: posts,
+          author: users,
+        })
+        .from(posts)
+        .leftJoin(users, eq(posts.userId, users.id))
+        .where(inArray(posts.id, regularPostIds));
+    }
+
+    // Obtener los blog posts
+    let blogPostsData: any[] = [];
+    if (blogPostIds.length > 0) {
+      blogPostsData = await db
+        .select({
+          post: blogPosts,
+          author: users,
+        })
+        .from(blogPosts)
+        .leftJoin(users, eq(blogPosts.authorId, users.id))
+        .where(inArray(blogPosts.id, blogPostIds));
+    }
+
+    // Combinar los resultados manteniendo el orden original
+    const result = items.map(item => {
+      let postData;
+
+      if (item.postType === 'post') {
+        const found = regularPosts.find(p => p.post.id === item.postId);
+        if (found) {
+          postData = {
+            ...found.post,
+            type: 'post',
+            author: found.author,
+            userId: found.post.userId,
+          };
+        }
+      } else if (item.postType === 'blog') {
+        const found = blogPostsData.find(p => p.post.id === item.postId);
+        if (found) {
+          postData = {
+            ...found.post,
+            type: 'blog',
+            author: found.author,
+            userId: found.post.authorId,
+          };
+        }
+      }
+
+      if (!postData) {
+        return null;
+      }
+
+      return {
+        id: item.id,
+        postId: item.postId,
+        postType: item.postType,
+        inspirationNote: item.inspirationNote,
+        tags: item.tags,
+        inspirationType: item.inspirationType,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+        post: postData,
+      };
+    }).filter(item => item !== null);
+
+    return result;
   },
 
   /**
