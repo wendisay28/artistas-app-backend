@@ -1,5 +1,5 @@
-import { and, eq, gte, lte, ne, or, sql, SQL, count } from 'drizzle-orm';
-import { events, categories, users, eventAttendees } from '../../schema.js';
+import { and, eq, gte, lte, lt, ne, or, sql, SQL, count, desc, avg } from 'drizzle-orm';
+import { events, categories, users, eventAttendees, eventReviews, eventAgenda } from '../../schema.js';
 import { db } from '../../db.js';
 import { generateUniqueSlug } from './event.utils.js';
 import { CreateEventInput, UpdateEventInput, EventFilterOptions } from './event.types.js';
@@ -11,37 +11,199 @@ export class EventService {
   /**
    * Obtiene un evento por su ID con sus relaciones
    */
-  static async getEventById(eventId: number) {
-    const event = await db.query.events.findFirst({
-      where: (events: any, { eq }: any) => eq(events.id, eventId),
-      with: {
+  static async getEventById(eventId: number, userId?: string) {
+    // Obtener evento con información del organizador
+    const [result] = await db
+      .select({
+        // Campos del evento
+        id: events.id,
+        title: events.title,
+        slug: events.slug,
+        description: events.description,
+        shortDescription: events.shortDescription,
+        startDate: events.startDate,
+        endDate: events.endDate,
+        timezone: events.timezone,
+        locationType: events.locationType,
+        address: events.address,
+        city: events.city,
+        state: events.state,
+        country: events.country,
+        coordinates: events.coordinates,
+        onlineEventUrl: events.onlineEventUrl,
+        venueName: events.venueName,
+        venueDescription: events.venueDescription,
+        isFree: events.isFree,
+        ticketPrice: events.ticketPrice,
+        ticketUrl: events.ticketUrl,
+        capacity: events.capacity,
+        availableTickets: events.availableTickets,
+        featuredImage: events.featuredImage,
+        gallery: events.gallery,
+        videoUrl: events.videoUrl,
+        status: events.status,
+        isFeatured: events.isFeatured,
+        isRecurring: events.isRecurring,
+        recurrencePattern: events.recurrencePattern,
+        categoryId: events.categoryId,
+        subcategories: events.subcategories,
+        tags: events.tags,
+        eventType: events.eventType,
+        organizerId: events.organizerId,
+        companyId: events.companyId,
+        viewCount: events.viewCount,
+        saveCount: events.saveCount,
+        shareCount: events.shareCount,
+        requiresApproval: events.requiresApproval,
+        enableWaitlist: events.enableWaitlist,
+        createdAt: events.createdAt,
+        updatedAt: events.updatedAt,
+        // Información del organizador (solo nombre y avatar)
         organizer: {
-          columns: {
-            id: true,
-            displayName: true,
-            profileImageUrl: true,
-            email: true,
-          },
+          id: users.id,
+          displayName: users.displayName,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+          isVerified: users.isVerified,
+          userType: users.userType,
         },
-        category: {
-          columns: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      },
-    });
+      })
+      .from(events)
+      .leftJoin(users, eq(events.organizerId, users.id))
+      .where(eq(events.id, eventId));
 
-    if (event) {
-      // Incrementar el contador de vistas
-      await db
-        .update(events)
-        .set({ viewCount: (event.viewCount || 0) + 1 })
-        .where(eq(events.id, eventId));
+    if (!result) {
+      return null;
     }
 
-    return event;
+    // Incrementar el contador de vistas
+    await db
+      .update(events)
+      .set({ viewCount: (result.viewCount || 0) + 1 })
+      .where(eq(events.id, eventId));
+
+    // Obtener agenda del evento
+    const agenda = await db
+      .select({
+        id: eventAgenda.id,
+        title: eventAgenda.title,
+        description: eventAgenda.description,
+        startTime: eventAgenda.startTime,
+        endTime: eventAgenda.endTime,
+        location: eventAgenda.location,
+        speakerName: eventAgenda.speakerName,
+        speakerTitle: eventAgenda.speakerTitle,
+        speakerImage: eventAgenda.speakerImage,
+        sortOrder: eventAgenda.sortOrder,
+      })
+      .from(eventAgenda)
+      .where(eq(eventAgenda.eventId, eventId))
+      .orderBy(eventAgenda.sortOrder);
+
+    // Obtener reseñas del evento con información del usuario
+    const reviews = await db
+      .select({
+        id: eventReviews.id,
+        rating: eventReviews.rating,
+        title: eventReviews.title,
+        comment: eventReviews.comment,
+        isVerified: eventReviews.isVerified,
+        createdAt: eventReviews.createdAt,
+        organizerResponse: eventReviews.organizerResponse,
+        organizerResponseAt: eventReviews.organizerResponseAt,
+        user: {
+          id: users.id,
+          displayName: users.displayName,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+        },
+      })
+      .from(eventReviews)
+      .leftJoin(users, eq(eventReviews.userId, users.id))
+      .where(and(
+        eq(eventReviews.eventId, eventId),
+        eq(eventReviews.isHidden, false)
+      ))
+      .orderBy(desc(eventReviews.createdAt));
+
+    // Calcular estadísticas de reseñas
+    const reviewStats = {
+      count: reviews.length,
+      average: reviews.length > 0
+        ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+        : 0,
+      distribution: {
+        5: reviews.filter(r => r.rating === 5).length,
+        4: reviews.filter(r => r.rating === 4).length,
+        3: reviews.filter(r => r.rating === 3).length,
+        2: reviews.filter(r => r.rating === 2).length,
+        1: reviews.filter(r => r.rating === 1).length,
+      }
+    };
+
+    // Obtener estado de registro del usuario actual (si está autenticado)
+    let userRegistration = null;
+    if (userId) {
+      const [registration] = await db
+        .select({
+          id: eventAttendees.id,
+          status: eventAttendees.status,
+          registeredAt: eventAttendees.registeredAt,
+          checkedInAt: eventAttendees.checkedInAt,
+          certificateUrl: eventAttendees.certificateUrl,
+        })
+        .from(eventAttendees)
+        .where(and(
+          eq(eventAttendees.eventId, eventId),
+          eq(eventAttendees.userId, userId)
+        ));
+
+      if (registration) {
+        // Verificar si el usuario ya dejó una reseña
+        const [existingReview] = await db
+          .select({ id: eventReviews.id })
+          .from(eventReviews)
+          .where(and(
+            eq(eventReviews.eventId, eventId),
+            eq(eventReviews.userId, userId)
+          ));
+
+        // Verificar si el evento ya pasó
+        const eventDate = result.startDate ? new Date(result.startDate) : new Date();
+        const now = new Date();
+        const isEventPast = eventDate < now || result.status === 'completed';
+
+        userRegistration = {
+          ...registration,
+          isRegistered: true,
+          hasReviewed: !!existingReview,
+          // Solo puede dejar reseña si: está aprobado, hizo check-in, evento ya pasó, y no ha reseñado
+          canReview: registration.status === 'approved' && !!registration.checkedInAt && isEventPast && !existingReview,
+          // Solo puede descargar certificado si: está aprobado y hizo check-in
+          canDownloadCertificate: registration.status === 'approved' && !!registration.checkedInAt,
+        };
+      }
+    }
+
+    // Contar asistentes aprobados
+    const [attendeeCount] = await db
+      .select({ count: count() })
+      .from(eventAttendees)
+      .where(and(
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.status, 'approved')
+      ));
+
+    return {
+      ...result,
+      agenda,
+      reviews,
+      reviewStats,
+      userRegistration,
+      attendeeCount: attendeeCount?.count || 0,
+    };
   }
 
   /**
@@ -55,11 +217,11 @@ export class EventService {
     const startDate = eventData.startDate ? new Date(eventData.startDate) : new Date();
     const endDate = eventData.endDate ? new Date(eventData.endDate) : null;
 
-    // Preparar datos para la creación
+    // Preparar datos para la creación (bio se mapea a shortDescription)
     const newEvent = {
       title: eventData.title,
       description: eventData.description,
-      shortDescription: eventData.shortDescription || null,
+      shortDescription: (eventData as any).bio || eventData.shortDescription || null,
       startDate: startDate,
       endDate: endDate || null,
       timezone: eventData.timezone || 'America/Mexico_City',
@@ -108,6 +270,19 @@ export class EventService {
   }
 
   /**
+   * Obtiene los eventos creados por un usuario
+   */
+  static async getMyEvents(userId: string) {
+    const userEvents = await db
+      .select()
+      .from(events)
+      .where(eq(events.organizerId, userId))
+      .orderBy(sql`${events.startDate} DESC`);
+
+    return userEvents;
+  }
+
+  /**
    * Actualiza un evento existente
    */
   static async updateEvent(eventId: number, eventData: UpdateEventInput, userId: string) {
@@ -128,6 +303,12 @@ export class EventService {
 
     // Preparar datos para la actualización
     const updateData: any = { ...eventData };
+
+    // Mapear bio a shortDescription si se envía
+    if (updateData.bio !== undefined) {
+      updateData.shortDescription = updateData.bio;
+      delete updateData.bio;
+    }
 
     // Si se actualiza el título, generar un nuevo slug
     if (updateData.title && updateData.title !== existingEvent.title) {
@@ -730,6 +911,304 @@ export class EventService {
       ...stats,
       capacity,
       availableSpots,
+    };
+  }
+
+  // ========== RESEÑAS ==========
+
+  /**
+   * Crea una reseña para un evento
+   */
+  static async createReview(eventId: number, userId: string, data: {
+    rating: number;
+    title?: string;
+    comment?: string;
+  }) {
+    // Verificar que el usuario asistió al evento
+    const [attendance] = await db
+      .select()
+      .from(eventAttendees)
+      .where(and(
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.userId, userId),
+        eq(eventAttendees.status, 'approved')
+      ));
+
+    if (!attendance) {
+      throw new Error('NOT_ATTENDEE');
+    }
+
+    if (!attendance.checkedInAt) {
+      throw new Error('NOT_CHECKED_IN');
+    }
+
+    // Verificar que no haya dejado una reseña antes
+    const [existingReview] = await db
+      .select()
+      .from(eventReviews)
+      .where(and(
+        eq(eventReviews.eventId, eventId),
+        eq(eventReviews.userId, userId)
+      ));
+
+    if (existingReview) {
+      throw new Error('ALREADY_REVIEWED');
+    }
+
+    // Crear la reseña
+    const [review] = await db
+      .insert(eventReviews)
+      .values({
+        eventId,
+        userId,
+        rating: data.rating,
+        title: data.title || null,
+        comment: data.comment || null,
+        isVerified: true, // Verificado porque ya comprobamos que asistió
+      })
+      .returning();
+
+    return review;
+  }
+
+  /**
+   * Obtiene las reseñas de un evento
+   */
+  static async getEventReviews(eventId: number) {
+    const reviews = await db
+      .select({
+        id: eventReviews.id,
+        rating: eventReviews.rating,
+        title: eventReviews.title,
+        comment: eventReviews.comment,
+        isVerified: eventReviews.isVerified,
+        createdAt: eventReviews.createdAt,
+        organizerResponse: eventReviews.organizerResponse,
+        organizerResponseAt: eventReviews.organizerResponseAt,
+        user: {
+          id: users.id,
+          displayName: users.displayName,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+        },
+      })
+      .from(eventReviews)
+      .leftJoin(users, eq(eventReviews.userId, users.id))
+      .where(and(
+        eq(eventReviews.eventId, eventId),
+        eq(eventReviews.isHidden, false)
+      ))
+      .orderBy(desc(eventReviews.createdAt));
+
+    return reviews;
+  }
+
+  // ========== HISTORIAL DE ASISTENCIA ==========
+
+  /**
+   * Obtiene los eventos a los que el usuario ha asistido (no creados por él)
+   * Solo incluye eventos pasados o con check-in realizado
+   */
+  static async getAttendedEvents(userId: string) {
+    const now = new Date();
+
+    const attendedEvents = await db
+      .select({
+        id: events.id,
+        title: events.title,
+        slug: events.slug,
+        shortDescription: events.shortDescription,
+        description: events.description,
+        startDate: events.startDate,
+        endDate: events.endDate,
+        featuredImage: events.featuredImage,
+        city: events.city,
+        address: events.address,
+        country: events.country,
+        locationType: events.locationType,
+        status: events.status,
+        capacity: events.capacity,
+        availableTickets: events.availableTickets,
+        isFree: events.isFree,
+        ticketPrice: events.ticketPrice,
+        tags: events.tags,
+        organizerId: events.organizerId,
+        // Datos del registro
+        registrationStatus: eventAttendees.status,
+        registeredAt: eventAttendees.registeredAt,
+        checkedInAt: eventAttendees.checkedInAt,
+        certificateUrl: eventAttendees.certificateUrl,
+        // Organizador
+        organizer: {
+          id: users.id,
+          displayName: users.displayName,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+        },
+      })
+      .from(eventAttendees)
+      .innerJoin(events, eq(eventAttendees.eventId, events.id))
+      .leftJoin(users, eq(events.organizerId, users.id))
+      .where(and(
+        eq(eventAttendees.userId, userId),
+        ne(events.organizerId, userId), // No incluir eventos que el usuario organizó
+        // Solo eventos pasados o completados o con check-in
+        or(
+          lte(events.startDate, now),
+          eq(events.status, 'completed'),
+          sql`${eventAttendees.checkedInAt} IS NOT NULL`
+        )
+      ))
+      .orderBy(desc(events.startDate));
+
+    // Verificar si el usuario dejó reseña en cada evento
+    const eventsWithReviewStatus = await Promise.all(
+      attendedEvents.map(async (event) => {
+        const [review] = await db
+          .select({ id: eventReviews.id })
+          .from(eventReviews)
+          .where(and(
+            eq(eventReviews.eventId, event.id),
+            eq(eventReviews.userId, userId)
+          ));
+
+        return {
+          ...event,
+          hasReviewed: !!review,
+          canReview: event.registrationStatus === 'approved' && event.checkedInAt && !review,
+          canDownloadCertificate: event.registrationStatus === 'approved' && !!event.checkedInAt,
+        };
+      })
+    );
+
+    return eventsWithReviewStatus;
+  }
+
+  /**
+   * Obtiene los eventos próximos donde el usuario está registrado (no creados por él)
+   */
+  static async getRegisteredEvents(userId: string) {
+    const now = new Date();
+
+    const registeredEvents = await db
+      .select({
+        id: events.id,
+        title: events.title,
+        slug: events.slug,
+        shortDescription: events.shortDescription,
+        startDate: events.startDate,
+        endDate: events.endDate,
+        featuredImage: events.featuredImage,
+        city: events.city,
+        address: events.address,
+        country: events.country,
+        locationType: events.locationType,
+        onlineEventUrl: events.onlineEventUrl,
+        status: events.status,
+        capacity: events.capacity,
+        availableTickets: events.availableTickets,
+        isFree: events.isFree,
+        ticketPrice: events.ticketPrice,
+        tags: events.tags,
+        organizerId: events.organizerId,
+        // Datos del registro
+        registrationStatus: eventAttendees.status,
+        registeredAt: eventAttendees.registeredAt,
+        // Organizador
+        organizer: {
+          id: users.id,
+          displayName: users.displayName,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+        },
+      })
+      .from(eventAttendees)
+      .innerJoin(events, eq(eventAttendees.eventId, events.id))
+      .leftJoin(users, eq(events.organizerId, users.id))
+      .where(and(
+        eq(eventAttendees.userId, userId),
+        ne(events.organizerId, userId), // No incluir eventos que el usuario organizó
+        gte(events.startDate, now), // Solo eventos futuros
+        ne(events.status, 'cancelled') // No incluir eventos cancelados
+      ))
+      .orderBy(events.startDate);
+
+    return registeredEvents;
+  }
+
+  // ========== CERTIFICADOS ==========
+
+  /**
+   * Genera el certificado de asistencia para un evento
+   */
+  static async generateCertificate(eventId: number, odUserId: string) {
+    // Verificar que el usuario asistió al evento
+    const [attendance] = await db
+      .select({
+        id: eventAttendees.id,
+        status: eventAttendees.status,
+        checkedInAt: eventAttendees.checkedInAt,
+        certificateUrl: eventAttendees.certificateUrl,
+      })
+      .from(eventAttendees)
+      .where(and(
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.userId, odUserId)
+      ));
+
+    if (!attendance) {
+      throw new Error('NOT_ATTENDEE');
+    }
+
+    if (attendance.status !== 'approved') {
+      throw new Error('NOT_APPROVED');
+    }
+
+    if (!attendance.checkedInAt) {
+      throw new Error('NOT_CHECKED_IN');
+    }
+
+    // Obtener datos del evento y usuario
+    const [event] = await db
+      .select({
+        title: events.title,
+        startDate: events.startDate,
+        endDate: events.endDate,
+        venueName: events.venueName,
+        city: events.city,
+      })
+      .from(events)
+      .where(eq(events.id, eventId));
+
+    const [user] = await db
+      .select({
+        displayName: users.displayName,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(users)
+      .where(eq(users.id, odUserId));
+
+    if (!event || !user) {
+      throw new Error('DATA_NOT_FOUND');
+    }
+
+    const userName = user.displayName || `${user.firstName || ''} ${user.lastName || ''}`.trim();
+
+    // Retornar datos del certificado (el frontend puede generar el PDF)
+    return {
+      eventId,
+      odUserId,
+      eventTitle: event.title,
+      eventDate: event.startDate,
+      eventEndDate: event.endDate,
+      eventLocation: event.venueName || event.city || 'Virtual',
+      attendeeName: userName,
+      checkedInAt: attendance.checkedInAt,
+      certificateCode: `CERT-${eventId}-${Date.now().toString(36).toUpperCase()}`,
     };
   }
 }
