@@ -14,18 +14,64 @@ class EventController {
     try {
       const { id } = req.params;
       const eventId = parseInt(id, 10);
+      const userId = (req as any).user?.id; // Usuario autenticado (opcional)
 
       if (isNaN(eventId)) {
         return res.status(400).json({ error: 'ID de evento no válido' });
       }
 
-      const event = await EventService.getEventById(eventId);
+      const event = await EventService.getEventById(eventId, userId);
 
       if (!event) {
         return res.status(404).json({ error: 'Evento no encontrado' });
       }
 
-      // Formatear respuesta
+      // Formatear respuesta con organizador mapeado (solo nombre y avatar)
+      const organizer = event.organizer ? {
+        id: event.organizer.id,
+        displayName: event.organizer.displayName,
+        firstName: event.organizer.firstName,
+        lastName: event.organizer.lastName,
+        profileImageUrl: event.organizer.profileImageUrl,
+        isVerified: event.organizer.isVerified,
+        userType: event.organizer.userType,
+        // Campos mapeados para compatibilidad con frontend
+        name: event.organizer.displayName || `${event.organizer.firstName || ''} ${event.organizer.lastName || ''}`.trim() || 'Organizador',
+        avatar: event.organizer.profileImageUrl || '/images/default-avatar.png',
+        verified: event.organizer.isVerified || false,
+        // Estadísticas del organizador (se pueden calcular después)
+        eventsCount: 0,
+        rating: 0,
+      } : null;
+
+      // Formatear agenda para el frontend
+      const agenda = event.agenda?.map((item: any) => ({
+        time: item.startTime ? new Date(item.startTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '',
+        title: item.title,
+        description: item.description,
+        speaker: item.speakerName ? {
+          name: item.speakerName,
+          title: item.speakerTitle,
+          image: item.speakerImage,
+        } : null,
+      })) || [];
+
+      // Formatear reseñas para el frontend
+      const reviews = event.reviews?.map((review: any) => ({
+        id: review.id,
+        rating: review.rating,
+        title: review.title,
+        comment: review.comment,
+        isVerified: review.isVerified,
+        createdAt: review.createdAt,
+        organizerResponse: review.organizerResponse,
+        user: review.user ? {
+          id: review.user.id,
+          name: review.user.displayName || `${review.user.firstName || ''} ${review.user.lastName || ''}`.trim(),
+          avatar: review.user.profileImageUrl || '/images/default-avatar.png',
+        } : null,
+      })) || [];
+
       const response = {
         id: event.id,
         title: event.title,
@@ -56,14 +102,27 @@ class EventController {
         isFeatured: event.isFeatured,
         isRecurring: event.isRecurring,
         recurrencePattern: event.recurrencePattern,
-        category: event.category,
+        categoryId: event.categoryId,
         subcategories: event.subcategories || [],
         tags: event.tags || [],
         eventType: event.eventType,
         viewCount: event.viewCount,
         saveCount: event.saveCount,
         shareCount: event.shareCount,
-        organizer: event.organizer,
+        requiresApproval: event.requiresApproval,
+        enableWaitlist: event.enableWaitlist,
+        // Reseñas y rating
+        rating: event.reviewStats?.average || 0,
+        reviewCount: event.reviewStats?.count || 0,
+        reviewStats: event.reviewStats,
+        reviews: reviews,
+        // Agenda
+        agenda: agenda,
+        // Estado del usuario actual
+        userRegistration: event.userRegistration,
+        attendeeCount: event.attendeeCount,
+        // Organizador
+        organizer: organizer,
         createdAt: event.createdAt,
         updatedAt: event.updatedAt,
       };
@@ -71,6 +130,28 @@ class EventController {
       return res.status(200).json(response);
     } catch (error) {
       console.error('Error al obtener el evento:', error);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+
+  /**
+   * Obtiene los eventos del usuario autenticado
+   */
+  static async getMyEvents(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const userId = req.user.id;
+      const userEvents = await EventService.getMyEvents(userId);
+
+      return res.status(200).json({
+        success: true,
+        data: userEvents
+      });
+    } catch (error) {
+      console.error('Error al obtener mis eventos:', error);
       return res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
@@ -94,7 +175,7 @@ class EventController {
       }
 
       const eventData: CreateEventInput = req.body;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       console.log(`✅ Usuario autenticado: ${userId}`);
 
@@ -181,7 +262,7 @@ class EventController {
 
       const { id } = req.params;
       const eventId = parseInt(id, 10);
-      const userId = req.user._id;
+      const userId = req.user.id;
       const eventData: UpdateEventInput = req.body;
 
       // Validar ID
@@ -258,7 +339,7 @@ class EventController {
   static async cancelEvent(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const userId = (req as any).user?._id;
+      const userId = req.user?.id;
 
       if (!userId) {
         return res.status(401).json({
@@ -377,7 +458,7 @@ class EventController {
 
       const { eventId } = req.params;
       const { ticketTypeId } = req.body;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       const attendee = await EventService.registerForEvent(
         parseInt(eventId),
@@ -420,7 +501,7 @@ class EventController {
       }
 
       const { eventId } = req.params;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       await EventService.unregisterFromEvent(parseInt(eventId), userId);
 
@@ -449,7 +530,7 @@ class EventController {
       }
 
       const { eventId } = req.params;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       const registration = await EventService.getMyRegistration(parseInt(eventId), userId);
 
@@ -473,7 +554,7 @@ class EventController {
       }
 
       const { eventId } = req.params;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       const attendees = await EventService.getEventAttendees(parseInt(eventId), userId);
 
@@ -524,7 +605,7 @@ class EventController {
       }
 
       const { eventId, attendeeId } = req.params;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       const attendee = await EventService.approveAttendee(
         parseInt(eventId),
@@ -564,7 +645,7 @@ class EventController {
       }
 
       const { eventId, attendeeId } = req.params;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       const attendee = await EventService.rejectAttendee(
         parseInt(eventId),
@@ -601,7 +682,7 @@ class EventController {
       }
 
       const { eventId, attendeeId } = req.params;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       const attendee = await EventService.moveToWaitlist(
         parseInt(eventId),
@@ -641,7 +722,7 @@ class EventController {
       }
 
       const { eventId, attendeeId } = req.params;
-      const userId = req.user._id;
+      const userId = req.user.id;
 
       const attendee = await EventService.moveFromWaitlist(
         parseInt(eventId),
@@ -668,6 +749,265 @@ class EventController {
       }
 
       res.status(500).json({ error: 'Error al aprobar desde lista de espera' });
+    }
+  }
+
+  // ========== CHECK-IN ==========
+
+  /**
+   * Hace check-in de un asistente en el evento
+   */
+  static async checkInAttendee(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const { eventId, attendeeId } = req.params;
+      const userId = req.user.id;
+
+      const attendee = await EventService.checkInAttendee(
+        parseInt(eventId),
+        parseInt(attendeeId),
+        userId
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Check-in realizado exitosamente',
+        data: attendee
+      });
+    } catch (error: any) {
+      console.error('Error al hacer check-in:', error);
+
+      if (error.message === 'EVENT_NOT_FOUND') {
+        return res.status(404).json({ error: 'Evento no encontrado' });
+      }
+      if (error.message === 'FORBIDDEN') {
+        return res.status(403).json({ error: 'No tienes permisos para gestionar asistentes' });
+      }
+      if (error.message === 'ATTENDEE_NOT_FOUND') {
+        return res.status(404).json({ error: 'Asistente no encontrado' });
+      }
+      if (error.message === 'ATTENDEE_NOT_APPROVED') {
+        return res.status(400).json({ error: 'El asistente no está aprobado para el evento' });
+      }
+      if (error.message === 'ALREADY_CHECKED_IN') {
+        return res.status(400).json({ error: 'El asistente ya hizo check-in' });
+      }
+
+      res.status(500).json({ error: 'Error al realizar el check-in' });
+    }
+  }
+
+  /**
+   * Deshace el check-in de un asistente
+   */
+  static async undoCheckIn(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const { eventId, attendeeId } = req.params;
+      const userId = req.user.id;
+
+      const attendee = await EventService.undoCheckIn(
+        parseInt(eventId),
+        parseInt(attendeeId),
+        userId
+      );
+
+      res.status(200).json({
+        success: true,
+        message: 'Check-in revertido exitosamente',
+        data: attendee
+      });
+    } catch (error: any) {
+      console.error('Error al revertir check-in:', error);
+
+      if (error.message === 'EVENT_NOT_FOUND') {
+        return res.status(404).json({ error: 'Evento no encontrado' });
+      }
+      if (error.message === 'FORBIDDEN') {
+        return res.status(403).json({ error: 'No tienes permisos para gestionar asistentes' });
+      }
+      if (error.message === 'ATTENDEE_NOT_FOUND') {
+        return res.status(404).json({ error: 'Asistente no encontrado' });
+      }
+      if (error.message === 'NOT_CHECKED_IN') {
+        return res.status(400).json({ error: 'El asistente no tiene check-in registrado' });
+      }
+
+      res.status(500).json({ error: 'Error al revertir el check-in' });
+    }
+  }
+
+  // ========== RESEÑAS ==========
+
+  /**
+   * Crea una reseña para un evento
+   */
+  static async createReview(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const { eventId } = req.params;
+      const { rating, title, comment } = req.body;
+      const userId = req.user.id;
+
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: 'La calificación debe ser entre 1 y 5' });
+      }
+
+      const review = await EventService.createReview(parseInt(eventId), userId, {
+        rating,
+        title,
+        comment,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Reseña creada exitosamente',
+        data: review,
+      });
+    } catch (error: any) {
+      console.error('Error al crear reseña:', error);
+
+      if (error.message === 'NOT_ATTENDEE') {
+        return res.status(403).json({ error: 'No puedes reseñar un evento al que no asististe' });
+      }
+      if (error.message === 'NOT_CHECKED_IN') {
+        return res.status(403).json({ error: 'Debes haber hecho check-in para dejar una reseña' });
+      }
+      if (error.message === 'ALREADY_REVIEWED') {
+        return res.status(400).json({ error: 'Ya dejaste una reseña para este evento' });
+      }
+
+      res.status(500).json({ error: 'Error al crear la reseña' });
+    }
+  }
+
+  /**
+   * Obtiene las reseñas de un evento
+   */
+  static async getEventReviews(req: Request, res: Response) {
+    try {
+      const { eventId } = req.params;
+      const reviews = await EventService.getEventReviews(parseInt(eventId));
+
+      res.status(200).json({
+        success: true,
+        data: reviews,
+      });
+    } catch (error) {
+      console.error('Error al obtener reseñas:', error);
+      res.status(500).json({ error: 'Error al obtener las reseñas' });
+    }
+  }
+
+  // ========== HISTORIAL DE ASISTENCIA ==========
+
+  /**
+   * Obtiene los eventos donde el usuario está registrado (próximos)
+   */
+  static async getRegisteredEvents(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const userId = req.user.id;
+      const events = await EventService.getRegisteredEvents(userId);
+
+      // Formatear eventos para el frontend
+      const formattedEvents = events.map((event: any) => ({
+        ...event,
+        organizer: event.organizer ? {
+          id: event.organizer.id,
+          name: event.organizer.displayName || `${event.organizer.firstName || ''} ${event.organizer.lastName || ''}`.trim(),
+          avatar: event.organizer.profileImageUrl || '/images/default-avatar.png',
+        } : null,
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: formattedEvents,
+      });
+    } catch (error) {
+      console.error('Error al obtener eventos registrados:', error);
+      res.status(500).json({ error: 'Error al obtener los eventos registrados' });
+    }
+  }
+
+  /**
+   * Obtiene los eventos a los que el usuario asistió
+   */
+  static async getAttendedEvents(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const userId = req.user.id;
+      const events = await EventService.getAttendedEvents(userId);
+
+      // Formatear eventos para el frontend
+      const formattedEvents = events.map((event: any) => ({
+        ...event,
+        organizer: event.organizer ? {
+          id: event.organizer.id,
+          name: event.organizer.displayName || `${event.organizer.firstName || ''} ${event.organizer.lastName || ''}`.trim(),
+          avatar: event.organizer.profileImageUrl || '/images/default-avatar.png',
+        } : null,
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: formattedEvents,
+      });
+    } catch (error) {
+      console.error('Error al obtener historial de asistencia:', error);
+      res.status(500).json({ error: 'Error al obtener el historial de asistencia' });
+    }
+  }
+
+  // ========== CERTIFICADOS ==========
+
+  /**
+   * Genera el certificado de asistencia
+   */
+  static async generateCertificate(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'No autorizado' });
+      }
+
+      const { eventId } = req.params;
+      const userId = req.user.id;
+
+      const certificate = await EventService.generateCertificate(parseInt(eventId), userId);
+
+      res.status(200).json({
+        success: true,
+        data: certificate,
+      });
+    } catch (error: any) {
+      console.error('Error al generar certificado:', error);
+
+      if (error.message === 'NOT_ATTENDEE') {
+        return res.status(403).json({ error: 'No asististe a este evento' });
+      }
+      if (error.message === 'NOT_APPROVED') {
+        return res.status(403).json({ error: 'Tu registro no fue aprobado' });
+      }
+      if (error.message === 'NOT_CHECKED_IN') {
+        return res.status(403).json({ error: 'No hiciste check-in en este evento' });
+      }
+
+      res.status(500).json({ error: 'Error al generar el certificado' });
     }
   }
 }

@@ -856,6 +856,110 @@ export class EventService {
   }
 
   /**
+   * Hace check-in de un asistente en el evento
+   */
+  static async checkInAttendee(eventId: number, attendeeId: number, organizerId: string) {
+    // Verificar ownership del evento
+    const [event] = await db
+      .select()
+      .from(events)
+      .where(eq(events.id, eventId));
+
+    if (!event) {
+      throw new Error('EVENT_NOT_FOUND');
+    }
+
+    if (event.organizerId !== organizerId) {
+      throw new Error('FORBIDDEN');
+    }
+
+    // Verificar que el asistente existe y está aprobado
+    const [attendee] = await db
+      .select()
+      .from(eventAttendees)
+      .where(and(
+        eq(eventAttendees.id, attendeeId),
+        eq(eventAttendees.eventId, eventId)
+      ));
+
+    if (!attendee) {
+      throw new Error('ATTENDEE_NOT_FOUND');
+    }
+
+    if (attendee.status !== 'approved') {
+      throw new Error('ATTENDEE_NOT_APPROVED');
+    }
+
+    if (attendee.checkedInAt) {
+      throw new Error('ALREADY_CHECKED_IN');
+    }
+
+    // Realizar el check-in
+    const [updatedAttendee] = await db
+      .update(eventAttendees)
+      .set({
+        checkedInAt: new Date(),
+        checkedInBy: organizerId,
+        status: 'checked_in',
+        statusUpdatedAt: new Date(),
+      })
+      .where(eq(eventAttendees.id, attendeeId))
+      .returning();
+
+    return updatedAttendee;
+  }
+
+  /**
+   * Deshace el check-in de un asistente (en caso de error)
+   */
+  static async undoCheckIn(eventId: number, attendeeId: number, organizerId: string) {
+    // Verificar ownership del evento
+    const [event] = await db
+      .select()
+      .from(events)
+      .where(eq(events.id, eventId));
+
+    if (!event) {
+      throw new Error('EVENT_NOT_FOUND');
+    }
+
+    if (event.organizerId !== organizerId) {
+      throw new Error('FORBIDDEN');
+    }
+
+    // Verificar que el asistente tiene check-in
+    const [attendee] = await db
+      .select()
+      .from(eventAttendees)
+      .where(and(
+        eq(eventAttendees.id, attendeeId),
+        eq(eventAttendees.eventId, eventId)
+      ));
+
+    if (!attendee) {
+      throw new Error('ATTENDEE_NOT_FOUND');
+    }
+
+    if (!attendee.checkedInAt) {
+      throw new Error('NOT_CHECKED_IN');
+    }
+
+    // Revertir el check-in
+    const [updatedAttendee] = await db
+      .update(eventAttendees)
+      .set({
+        checkedInAt: null,
+        checkedInBy: null,
+        status: 'approved',
+        statusUpdatedAt: new Date(),
+      })
+      .where(eq(eventAttendees.id, attendeeId))
+      .returning();
+
+    return updatedAttendee;
+  }
+
+  /**
    * Obtiene el registro de un usuario para un evento
    */
   static async getMyRegistration(eventId: number, userId: string) {
@@ -1063,25 +1167,32 @@ export class EventService {
       ))
       .orderBy(desc(events.startDate));
 
-    // Verificar si el usuario dejó reseña en cada evento
-    const eventsWithReviewStatus = await Promise.all(
-      attendedEvents.map(async (event) => {
-        const [review] = await db
-          .select({ id: eventReviews.id })
-          .from(eventReviews)
-          .where(and(
-            eq(eventReviews.eventId, event.id),
-            eq(eventReviews.userId, userId)
-          ));
+    // Obtener todas las reseñas del usuario para los eventos asistidos en UNA sola query
+    const eventIds = attendedEvents.map(e => e.id);
 
-        return {
-          ...event,
-          hasReviewed: !!review,
-          canReview: event.registrationStatus === 'approved' && event.checkedInAt && !review,
-          canDownloadCertificate: event.registrationStatus === 'approved' && !!event.checkedInAt,
-        };
-      })
-    );
+    let userReviewsSet = new Set<number>();
+    if (eventIds.length > 0) {
+      const userReviews = await db
+        .select({ eventId: eventReviews.eventId })
+        .from(eventReviews)
+        .where(and(
+          eq(eventReviews.userId, userId),
+          sql`${eventReviews.eventId} = ANY(${eventIds})`
+        ));
+
+      userReviewsSet = new Set(userReviews.map(r => r.eventId));
+    }
+
+    // Mapear eventos con estado de reseña (sin queries adicionales)
+    const eventsWithReviewStatus = attendedEvents.map((event) => {
+      const hasReviewed = userReviewsSet.has(event.id);
+      return {
+        ...event,
+        hasReviewed,
+        canReview: event.registrationStatus === 'approved' && event.checkedInAt && !hasReviewed,
+        canDownloadCertificate: event.registrationStatus === 'approved' && !!event.checkedInAt,
+      };
+    });
 
     return eventsWithReviewStatus;
   }

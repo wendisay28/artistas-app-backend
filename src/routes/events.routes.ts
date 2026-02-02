@@ -29,8 +29,19 @@ eventsRoutes.get('/upcoming', EventController.getUpcomingEvents);
  * GET /api/v1/events/my
  * Obtener eventos del usuario autenticado (requiere auth)
  */
-// TODO: Implementar getMyEvents en el controlador
-// eventsRoutes.get('/my', authMiddleware, EventController.getMyEvents);
+eventsRoutes.get('/my', authMiddleware, EventController.getMyEvents);
+
+/**
+ * GET /api/v1/events/registered
+ * Obtener eventos donde el usuario está registrado - próximos (requiere auth)
+ */
+eventsRoutes.get('/registered', authMiddleware, EventController.getRegisteredEvents);
+
+/**
+ * GET /api/v1/events/attended
+ * Obtener eventos a los que el usuario asistió (requiere auth)
+ */
+eventsRoutes.get('/attended', authMiddleware, EventController.getAttendedEvents);
 
 /**
  * GET /api/v1/events/:id
@@ -120,9 +131,43 @@ eventsRoutes.post('/:eventId/attendees/:attendeeId/move-to-waitlist', authMiddle
 eventsRoutes.post('/:eventId/attendees/:attendeeId/move-from-waitlist', authMiddleware, EventController.moveFromWaitlist);
 
 /**
+ * POST /api/v1/events/:eventId/attendees/:attendeeId/checkin
+ * Hacer check-in de un asistente (solo organizador, requiere auth)
+ */
+eventsRoutes.post('/:eventId/attendees/:attendeeId/checkin', authMiddleware, EventController.checkInAttendee);
+
+/**
+ * DELETE /api/v1/events/:eventId/attendees/:attendeeId/checkin
+ * Deshacer check-in de un asistente (solo organizador, requiere auth)
+ */
+eventsRoutes.delete('/:eventId/attendees/:attendeeId/checkin', authMiddleware, EventController.undoCheckIn);
+
+/**
  * /api/v1/events/:eventId/ticket-types
  * Rutas de tipos de entradas/boletos para eventos
  */
 eventsRoutes.use('/:eventId/ticket-types', ticketTypesRoutes);
+
+// ========== RESEÑAS ==========
+
+/**
+ * POST /api/v1/events/:eventId/reviews
+ * Crear una reseña para un evento (requiere auth y haber asistido)
+ */
+eventsRoutes.post('/:eventId/reviews', authMiddleware, EventController.createReview);
+
+/**
+ * GET /api/v1/events/:eventId/reviews
+ * Obtener todas las reseñas de un evento (público)
+ */
+eventsRoutes.get('/:eventId/reviews', EventController.getEventReviews);
+
+// ========== CERTIFICADOS ==========
+
+/**
+ * GET /api/v1/events/:eventId/certificate
+ * Generar/obtener certificado de asistencia (requiere auth y haber asistido)
+ */
+eventsRoutes.get('/:eventId/certificate', authMiddleware, EventController.generateCertificate);
 
 export default eventsRoutes;
