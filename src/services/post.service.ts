@@ -546,8 +546,9 @@ export function getPostFields() {
     shareCount: posts.shareCount,
     viewCount: posts.viewCount,
     saveCount: sql<number>`(
-      SELECT COUNT(*)::int FROM collection_items ci
-      WHERE ci.post_id = ${posts.id} AND ci.post_type = 'post'
+      SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'collection_items')
+      THEN (SELECT COUNT(*)::int FROM collection_items ci WHERE ci.post_id = ${posts.id} AND ci.post_type = 'post')
+      ELSE 0 END
     )`,
     createdAt: posts.createdAt,
     updatedAt: posts.updatedAt,

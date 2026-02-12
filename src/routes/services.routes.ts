@@ -3,7 +3,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.middleware.js';
 import { db } from '../db.js';
 import { services, users } from '../schema.js';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, isNull } from 'drizzle-orm';
 import { logger } from '../utils/logger.js';
 import {
   readUserRateLimit,
@@ -26,14 +26,17 @@ const servicesRoutes = Router();
  *       200:
  *         description: Servicios obtenidos exitosamente
  */
-// GET /api/v1/services/me - Obtener servicios del usuario autenticado
+// GET /api/v1/services/me - Obtener servicios personales del usuario autenticado (excluye servicios de empresa)
 servicesRoutes.get('/me', authMiddleware, readUserRateLimit, asyncHandler(async (req, res) => {
   const userId = req.user!.id;
 
   const userServices = await db
     .select()
     .from(services)
-    .where(eq(services.userId, userId))
+    .where(and(
+      eq(services.userId, userId),
+      isNull(services.companyId)
+    ))
     .orderBy(desc(services.createdAt));
 
   res.json({
@@ -75,6 +78,29 @@ servicesRoutes.get('/user/:userId', readUserRateLimit, asyncHandler(async (req, 
   res.json({
     success: true,
     data: userServices,
+  });
+}));
+
+// GET /api/v1/services/company/:companyId - Obtener servicios de una empresa
+servicesRoutes.get('/company/:companyId', readUserRateLimit, asyncHandler(async (req, res) => {
+  const companyId = parseInt(req.params.companyId, 10);
+
+  if (isNaN(companyId)) {
+    throw new AppError(400, 'ID de empresa no válido', true, 'INVALID_ID');
+  }
+
+  const companyServices = await db
+    .select()
+    .from(services)
+    .where(and(
+      eq(services.companyId, companyId),
+      eq(services.isActive, true)
+    ))
+    .orderBy(desc(services.createdAt));
+
+  res.json({
+    success: true,
+    data: companyServices,
   });
 }));
 

@@ -1,11 +1,13 @@
 import { pgTable, serial, varchar, text, timestamp, boolean, integer, numeric } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users.js';
+import { companies } from './companies.js';
 
 // Tabla de servicios ofrecidos por usuarios/artistas
 export const services = pgTable('services', {
   id: serial('id').primaryKey(),
   userId: varchar('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  companyId: integer('company_id').references(() => companies.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   price: numeric('price', { precision: 10, scale: 2 }),
@@ -21,6 +23,7 @@ export const services = pgTable('services', {
 export const artworks = pgTable('artworks', {
   id: serial('id').primaryKey(),
   userId: varchar('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  companyId: integer('company_id').references(() => companies.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
   category: varchar('category', {

@@ -26,6 +26,12 @@ eventsRoutes.get('/', EventController.searchEvents);
 eventsRoutes.get('/upcoming', EventController.getUpcomingEvents);
 
 /**
+ * GET /api/v1/events/company/:companyId
+ * Obtener eventos de una empresa (público)
+ */
+eventsRoutes.get('/company/:companyId', EventController.getCompanyEvents);
+
+/**
  * GET /api/v1/events/my
  * Obtener eventos del usuario autenticado (requiere auth)
  */

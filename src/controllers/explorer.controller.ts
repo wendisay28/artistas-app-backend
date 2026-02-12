@@ -157,24 +157,33 @@ class ExplorerController {
         .leftJoin(artists, eq(users.id, artists.userId))
         .where(whereCondition);
 
-      // Obtener fotos destacadas para cada artista
-      const artistsWithPhotos = await Promise.all(
-        artistsList.map(async (artist) => {
-          const featuredPhotos = await db
-            .select({
-              imageUrl: highlightPhotos.imageUrl,
-            })
-            .from(highlightPhotos)
-            .where(eq(highlightPhotos.userId, artist.id))
-            .orderBy(highlightPhotos.position)
-            .limit(4);
+      // Obtener fotos destacadas para cada artista (resiliente si la tabla no existe)
+      let artistsWithPhotos: typeof artistsList & { highlightPhotos?: string[] }[];
+      try {
+        artistsWithPhotos = await Promise.all(
+          artistsList.map(async (artist) => {
+            try {
+              const featuredPhotos = await db
+                .select({
+                  imageUrl: highlightPhotos.imageUrl,
+                })
+                .from(highlightPhotos)
+                .where(eq(highlightPhotos.userId, artist.id))
+                .orderBy(highlightPhotos.position)
+                .limit(4);
 
-          return {
-            ...artist,
-            highlightPhotos: featuredPhotos.map(photo => photo.imageUrl),
-          };
-        })
-      );
+              return {
+                ...artist,
+                highlightPhotos: featuredPhotos.map(photo => photo.imageUrl),
+              };
+            } catch {
+              return { ...artist, highlightPhotos: [] };
+            }
+          })
+        );
+      } catch {
+        artistsWithPhotos = artistsList.map(artist => ({ ...artist, highlightPhotos: [] }));
+      }
 
       res.status(200).json({
         data: artistsWithPhotos,
@@ -265,6 +274,12 @@ class ExplorerController {
           isFree: events.isFree,
           ticketPrice: events.ticketPrice,
           tags: events.tags,
+          eventType: events.eventType,
+          capacity: events.capacity,
+          companyId: events.companyId,
+          venueId: events.venueId,
+          status: events.status,
+          coordinates: events.coordinates,
           organizer: {
             id: users.id,
             displayName: users.displayName,
@@ -340,6 +355,7 @@ class ExplorerController {
       const venuesList = await db
         .select({
           id: venues.id,
+          companyId: venues.companyId,
           name: venues.name,
           description: venues.description,
           city: venues.city,
@@ -352,6 +368,8 @@ class ExplorerController {
           multimedia: venues.multimedia,
           openingHours: venues.openingHours,
           contact: venues.contact,
+          dailyRate: venues.dailyRate,
+          coordinates: venues.coordinates,
         })
         .from(venues)
         .where(and(...conditions))
@@ -388,6 +406,12 @@ class ExplorerController {
    */
   static async getServices(req: Request, res: Response) {
     try {
+      // Verificar si la tabla services existe
+      try {
+        await db.select({ id: services.id }).from(services).limit(0);
+      } catch {
+        return res.status(200).json({ data: [], pagination: { total: 0, limit: 20, offset: 0 } });
+      }
       const {
         query,
         category,
@@ -480,6 +504,12 @@ class ExplorerController {
    */
   static async getArtworks(req: Request, res: Response) {
     try {
+      // Verificar si la tabla artworks existe
+      try {
+        await db.select({ id: artworks.id }).from(artworks).limit(0);
+      } catch {
+        return res.status(200).json({ data: [], pagination: { total: 0, limit: 20, offset: 0 } });
+      }
       const {
         query,
         category,

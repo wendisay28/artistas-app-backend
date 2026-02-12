@@ -276,6 +276,19 @@ export class EventService {
   }
 
   /**
+   * Obtiene los eventos asociados a una empresa
+   */
+  static async getCompanyEvents(companyId: number) {
+    const companyEvents = await db
+      .select()
+      .from(events)
+      .where(eq(events.companyId, companyId))
+      .orderBy(sql`${events.startDate} DESC`);
+
+    return companyEvents;
+  }
+
+  /**
    * Obtiene los eventos creados por un usuario
    */
   static async getMyEvents(userId: string) {

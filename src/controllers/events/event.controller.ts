@@ -136,6 +136,30 @@ class EventController {
   }
 
   /**
+   * Obtiene los eventos de una empresa (público)
+   */
+  static async getCompanyEvents(req: Request, res: Response) {
+    try {
+      const { companyId } = req.params;
+      const id = parseInt(companyId, 10);
+
+      if (isNaN(id)) {
+        return res.status(400).json({ error: 'ID de empresa no válido' });
+      }
+
+      const companyEvents = await EventService.getCompanyEvents(id);
+
+      return res.status(200).json({
+        success: true,
+        data: companyEvents,
+      });
+    } catch (error) {
+      console.error('Error al obtener eventos de empresa:', error);
+      return res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+
+  /**
    * Obtiene los eventos del usuario autenticado
    */
   static async getMyEvents(req: Request, res: Response) {

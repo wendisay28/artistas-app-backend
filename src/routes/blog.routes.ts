@@ -71,8 +71,9 @@ blogRoutes.get('/', readUserRateLimit, asyncHandler(async (req, res) => {
       commentCount: blogPosts.commentCount,
       shareCount: blogPosts.shareCount,
       saveCount: sql<number>`(
-        SELECT COUNT(*)::int FROM collection_items ci
-        WHERE ci.post_id = ${blogPosts.id} AND ci.post_type = 'blog'
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'collection_items')
+        THEN (SELECT COUNT(*)::int FROM collection_items ci WHERE ci.post_id = ${blogPosts.id} AND ci.post_type = 'blog')
+        ELSE 0 END
       )`,
       visibility: blogPosts.visibility,
       allowComments: blogPosts.allowComments,
@@ -207,8 +208,9 @@ blogRoutes.get('/user/:userId', readUserRateLimit, asyncHandler(async (req, res)
       commentCount: blogPosts.commentCount,
       shareCount: blogPosts.shareCount,
       saveCount: sql<number>`(
-        SELECT COUNT(*)::int FROM collection_items ci
-        WHERE ci.post_id = ${blogPosts.id} AND ci.post_type = 'blog'
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'collection_items')
+        THEN (SELECT COUNT(*)::int FROM collection_items ci WHERE ci.post_id = ${blogPosts.id} AND ci.post_type = 'blog')
+        ELSE 0 END
       )`,
       visibility: blogPosts.visibility,
       allowComments: blogPosts.allowComments,
@@ -286,8 +288,9 @@ blogRoutes.get('/:id', readUserRateLimit, asyncHandler(async (req, res) => {
       commentCount: blogPosts.commentCount,
       shareCount: blogPosts.shareCount,
       saveCount: sql<number>`(
-        SELECT COUNT(*)::int FROM collection_items ci
-        WHERE ci.post_id = ${blogPosts.id} AND ci.post_type = 'blog'
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'collection_items')
+        THEN (SELECT COUNT(*)::int FROM collection_items ci WHERE ci.post_id = ${blogPosts.id} AND ci.post_type = 'blog')
+        ELSE 0 END
       )`,
       visibility: blogPosts.visibility,
       allowComments: blogPosts.allowComments,

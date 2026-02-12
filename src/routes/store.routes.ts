@@ -3,7 +3,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { asyncHandler, AppError } from '../middleware/errorHandler.middleware.js';
 import { db } from '../db.js';
 import { artworks, users } from '../schema.js';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, isNull } from 'drizzle-orm';
 import { logger } from '../utils/logger.js';
 import {
   readUserRateLimit,
@@ -26,14 +26,17 @@ const storeRoutes = Router();
  *       200:
  *         description: Productos obtenidos exitosamente
  */
-// GET /api/v1/store/me - Obtener productos del usuario autenticado
+// GET /api/v1/store/me - Obtener productos personales del usuario autenticado (excluye productos de empresa)
 storeRoutes.get('/me', authMiddleware, readUserRateLimit, asyncHandler(async (req, res) => {
   const userId = req.user!.id;
 
   const userProducts = await db
     .select()
     .from(artworks)
-    .where(eq(artworks.userId, userId))
+    .where(and(
+      eq(artworks.userId, userId),
+      isNull(artworks.companyId)
+    ))
     .orderBy(desc(artworks.createdAt));
 
   res.json({
@@ -76,6 +79,26 @@ storeRoutes.get('/user/:userId', readUserRateLimit, asyncHandler(async (req, res
   res.json({
     success: true,
     data: userProducts,
+  });
+}));
+
+// GET /api/v1/store/company/:companyId - Obtener productos de una empresa
+storeRoutes.get('/company/:companyId', readUserRateLimit, asyncHandler(async (req, res) => {
+  const companyId = parseInt(req.params.companyId, 10);
+
+  if (isNaN(companyId)) {
+    throw new AppError(400, 'ID de empresa no válido', true, 'INVALID_ID');
+  }
+
+  const companyProducts = await db
+    .select()
+    .from(artworks)
+    .where(eq(artworks.companyId, companyId))
+    .orderBy(desc(artworks.createdAt));
+
+  res.json({
+    success: true,
+    data: companyProducts,
   });
 }));
 
