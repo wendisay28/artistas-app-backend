@@ -1,40 +1,26 @@
-export {
-  posts,
-  postMedia,
-  postTypeEnum,
-  postRelations,
-  postMediaRelations,
-  comments,
-  commentLikes,
-  commentPollVotes,
-  commentRelations,
-} from '../models/post.model.js';
-
-export type {
-  Post,
-  NewPost,
-  PostMedia,
-  NewPostMedia,
-  Comment,
-  NewComment,
-  CommentLike,
-  CommentPollVote,
-} from '../models/post.model.js';
-
+// Exportar todos los schemas
 export * from './users.js';
-export * from './hierarchy.js';
 export * from './artists.js';
-export * from './companies.js';
 export * from './events.js';
-export * from './blog.js';
-export * from './profile.js';
-export * from './social.js';
-export * from './recommendations.js';
+export * from './venues.js';
+export * from './categories.js';
 export * from './hiring.js';
-export * from './messaging.js';
-export * from './offers.js';
-export * from './store.js';
+export * from './reviews.js';
+export * from './messages.js';
+export * from './recommendations.js';
+export * from './blog.js';
+export * from './companies.js';
 export * from './contracts.js';
-export * from './marketing.js';
-export * from './favorites.js';
 export * from './collections.js';
+export * from './favorites.js';
+export * from './dislikedItems.js';
+export * from './hierarchy.js';
+export * from './marketing.js';
+export * from './offers.js';
+export * from './profile.js';
+export * from './services.js';
+export * from './social.js';
+export * from './store.js';
+export * from './userContracts.js';
+export * from './userPreferences.js';
+export * from './ticketTypes.js';

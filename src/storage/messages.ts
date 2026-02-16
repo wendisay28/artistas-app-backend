@@ -22,6 +22,8 @@ export class MessageStorage {
         sharedPostId: messages.sharedPostId,
         isRead: messages.isRead,
         createdAt: messages.createdAt,
+        updatedAt: messages.updatedAt,
+        messageType: messages.messageType,
         sender: senderAlias,
         receiver: receiverAlias
       })
@@ -33,7 +35,15 @@ export class MessageStorage {
     if (!result) return undefined;
 
     return {
-      ...result,
+      id: result.id,
+      content: result.content,
+      senderId: result.senderId,
+      receiverId: result.receiverId,
+      sharedPostId: result.sharedPostId,
+      isRead: result.isRead,
+      createdAt: result.createdAt,
+      updatedAt: result.updatedAt,
+      messageType: result.messageType,
       sender: result.sender || {
         id: '',
         email: '',
@@ -74,6 +84,8 @@ export class MessageStorage {
         sharedPostId: messages.sharedPostId,
         isRead: messages.isRead,
         createdAt: messages.createdAt,
+        updatedAt: messages.updatedAt,
+        messageType: messages.messageType,
         sender: senderAlias,
         receiver: receiverAlias
       })
@@ -93,8 +105,16 @@ export class MessageStorage {
 
     const results = await finalQuery;
 
-    return results.map((result: { id: number; content: string; senderId: string; receiverId: string; sharedPostId: number | null; isRead: boolean | null; createdAt: Date | null; sender: typeof users.$inferSelect | null; receiver: typeof users.$inferSelect | null }) => ({
-      ...result,
+    return results.map((result) => ({
+      id: result.id,
+      content: result.content,
+      senderId: result.senderId,
+      receiverId: result.receiverId,
+      sharedPostId: result.sharedPostId,
+      isRead: result.isRead,
+      createdAt: result.createdAt,
+      updatedAt: result.updatedAt,
+      messageType: result.messageType ?? 'text',
       sender: result.sender || {
         id: '',
         email: '',
@@ -162,6 +182,8 @@ export class MessageStorage {
         sharedPostId: messages.sharedPostId,
         isRead: messages.isRead,
         createdAt: messages.createdAt,
+        updatedAt: messages.updatedAt,
+        messageType: messages.messageType,
         sender: senderAlias,
         receiver: receiverAlias
       })
@@ -171,8 +193,16 @@ export class MessageStorage {
       .where(or(eq(messages.senderId, userId), eq(messages.receiverId, userId)))
       .orderBy(asc(messages.createdAt));
 
-    return results.map((result: { id: number; content: string; senderId: string; receiverId: string; sharedPostId: number | null; isRead: boolean | null; createdAt: Date | null; sender: typeof users.$inferSelect | null; receiver: typeof users.$inferSelect | null }) => ({
-      ...result,
+    return results.map((result) => ({
+      id: result.id,
+      content: result.content,
+      senderId: result.senderId,
+      receiverId: result.receiverId,
+      sharedPostId: result.sharedPostId,
+      isRead: result.isRead,
+      createdAt: result.createdAt,
+      updatedAt: result.updatedAt,
+      messageType: result.messageType ?? 'text',
       sender: result.sender || {
         id: '',
         email: '',
@@ -240,6 +270,8 @@ export class MessageStorage {
         sharedPostId: messages.sharedPostId,
         isRead: messages.isRead,
         createdAt: messages.createdAt,
+        updatedAt: messages.updatedAt,
+        messageType: messages.messageType,
         sender: senderAlias,
         receiver: receiverAlias
       })
@@ -254,8 +286,16 @@ export class MessageStorage {
       )
       .orderBy(asc(messages.createdAt));
 
-    return results.map((result: { id: number; content: string; senderId: string; receiverId: string; sharedPostId: number | null; isRead: boolean | null; createdAt: Date | null; sender: typeof users.$inferSelect | null; receiver: typeof users.$inferSelect | null }) => ({
-      ...result,
+    return results.map((result: { id: number; content: string; senderId: string; receiverId: string; sharedPostId: number | null; isRead: boolean | null; createdAt: Date | null; updatedAt: Date | null; messageType: string | null; sender: typeof users.$inferSelect | null; receiver: typeof users.$inferSelect | null }) => ({
+      id: result.id,
+      content: result.content,
+      senderId: result.senderId,
+      receiverId: result.receiverId,
+      sharedPostId: result.sharedPostId,
+      isRead: result.isRead,
+      createdAt: result.createdAt,
+      updatedAt: new Date(),
+      messageType: result.messageType || 'text',
       sender: result.sender || {
         id: '',
         email: '',

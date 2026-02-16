@@ -37,15 +37,37 @@ try {
   if (process.env.NODE_ENV !== 'production') {
     logger.warn('No se pudo inicializar Firebase Admin. Usando mock en desarrollo', { error: (error as Error).message }, 'Firebase');
     auth = {
-      async verifyIdToken(_token: string) {
-        return { uid: 'dev-user' };
+      async verifyIdToken(token: string) {
+        // En desarrollo, decodificar el JWT real para extraer uid/email
+        try {
+          const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+          return {
+            uid: payload.user_id || payload.sub || 'dev-user',
+            email: payload.email || 'dev@example.com',
+            iat: payload.iat,
+            exp: payload.exp,
+            aud: payload.aud,
+            iss: payload.iss,
+            sub: payload.sub,
+            auth_time: payload.auth_time,
+            firebase: payload.firebase,
+          };
+        } catch {
+          return { uid: 'dev-user', email: 'dev@example.com' };
+        }
       },
-      async getUser(_uid: string) {
+      async getUser(uid: string) {
         return {
-          uid: 'dev-user',
-          email: 'dev@example.com',
-          providerData: [{ providerId: 'password' }],
+          uid,
+          email: uid === 'dev-user' ? 'dev@example.com' : undefined,
+          providerData: [{ providerId: 'google.com' }],
         };
+      },
+      async createUser(data: any) {
+        return { uid: data.uid || 'dev-user', email: data.email };
+      },
+      async createCustomToken(uid: string) {
+        return `mock-token-${uid}`;
       },
     };
   } else {

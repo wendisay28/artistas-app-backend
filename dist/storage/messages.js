@@ -27,7 +27,15 @@ export class MessageStorage {
         if (!result)
             return undefined;
         return {
-            ...result,
+            id: result.id,
+            content: result.content,
+            senderId: result.senderId,
+            receiverId: result.receiverId,
+            sharedPostId: result.sharedPostId,
+            isRead: result.isRead,
+            createdAt: result.createdAt,
+            updatedAt: result.updatedAt,
+            messageType: result.messageType,
             sender: result.sender || {
                 id: '',
                 email: '',
@@ -76,7 +84,15 @@ export class MessageStorage {
         const finalQuery = conditions.length > 0 ? query.where(and(...conditions)) : query;
         const results = await finalQuery;
         return results.map((result) => ({
-            ...result,
+            id: result.id,
+            content: result.content,
+            senderId: result.senderId,
+            receiverId: result.receiverId,
+            sharedPostId: result.sharedPostId,
+            isRead: result.isRead,
+            createdAt: result.createdAt,
+            updatedAt: new Date(),
+            messageType: result.messageType || 'text',
             sender: result.sender || {
                 id: '',
                 email: '',
@@ -148,7 +164,15 @@ export class MessageStorage {
             .where(or(eq(messages.senderId, userId), eq(messages.receiverId, userId)))
             .orderBy(asc(messages.createdAt));
         return results.map((result) => ({
-            ...result,
+            id: result.id,
+            content: result.content,
+            senderId: result.senderId,
+            receiverId: result.receiverId,
+            sharedPostId: result.sharedPostId,
+            isRead: result.isRead,
+            createdAt: result.createdAt,
+            updatedAt: new Date(),
+            messageType: result.messageType || 'text',
             sender: result.sender || {
                 id: '',
                 email: '',
@@ -220,7 +244,15 @@ export class MessageStorage {
             .where(or(and(eq(messages.senderId, userId1), eq(messages.receiverId, userId2)), and(eq(messages.senderId, userId2), eq(messages.receiverId, userId1))))
             .orderBy(asc(messages.createdAt));
         return results.map((result) => ({
-            ...result,
+            id: result.id,
+            content: result.content,
+            senderId: result.senderId,
+            receiverId: result.receiverId,
+            sharedPostId: result.sharedPostId,
+            isRead: result.isRead,
+            createdAt: result.createdAt,
+            updatedAt: new Date(),
+            messageType: result.messageType || 'text',
             sender: result.sender || {
                 id: '',
                 email: '',

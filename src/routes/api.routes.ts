@@ -31,8 +31,8 @@ import { offerController } from '../controllers/offer.controller.js';
 // Importar controladores de perfiles
 import { profileController } from '../controllers/profile.controller.js';
 
-// Importar rutas de posts
-import postRoutes from './posts.routes.js';
+// Importar rutas del blog
+import blogRoutes from './blog.routes.js';
 
 // Importar rutas sociales (usuarios sugeridos, tendencias, follows)
 import socialRoutes from './social.routes.js';
@@ -87,7 +87,6 @@ import onboardingRoutes from './onboarding.routes.js';
 // DISABLED: import artistHierarchyRoutes from './artist-hierarchy.routes.js'; - Controller has complex Drizzle errors
 import documentsRoutes from './documents.routes.js';
 import highlightPhotosRoutes from './highlight-photos.routes.js';
-import blogRoutes from './blog.routes.js';
 import servicesRoutes from './services.routes.js';
 import storeRoutes from './store.routes.js';
 import campaignsRoutes from './campaigns.routes.js';
@@ -268,8 +267,8 @@ v1.delete('/featured/:id', featuredController.deleteFeaturedItem as RouteHandler
 
 // Rutas de perfil (públicas eliminadas; usar protectedRoutes más abajo)
 
-// Rutas de posts
-v1.use('/posts', postRoutes);
+// Rutas del blog
+v1.use('/posts', blogRoutes);
 
 // Rutas sociales
 v1.use('/', socialRoutes);

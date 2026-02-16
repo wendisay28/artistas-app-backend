@@ -24,18 +24,18 @@ const envVariables: EnvVariable[] = [
   // Firebase
   {
     name: 'FIREBASE_PROJECT_ID',
-    required: true,
+    required: false, // Cambiado a false para desarrollo
     errorMessage: 'FIREBASE_PROJECT_ID es requerida para autenticación',
   },
   {
     name: 'FIREBASE_CLIENT_EMAIL',
-    required: true,
+    required: false, // Cambiado a false para desarrollo
     validator: (val) => val.includes('@') && val.includes('.'),
     errorMessage: 'FIREBASE_CLIENT_EMAIL debe ser un email válido',
   },
   {
     name: 'FIREBASE_PRIVATE_KEY',
-    required: true,
+    required: false, // Cambiado a false para desarrollo
     validator: (val) => val.includes('BEGIN PRIVATE KEY'),
     errorMessage: 'FIREBASE_PRIVATE_KEY debe contener una clave privada válida',
   },
@@ -43,13 +43,13 @@ const envVariables: EnvVariable[] = [
   // Supabase
   {
     name: 'SUPABASE_URL',
-    required: true,
+    required: false, // Cambiado a false para desarrollo
     validator: (val) => val.startsWith('https://'),
     errorMessage: 'SUPABASE_URL debe ser una URL HTTPS válida',
   },
   {
     name: 'SUPABASE_SERVICE_ROLE_KEY',
-    required: true,
+    required: false, // Cambiado a false para desarrollo
     errorMessage: 'SUPABASE_SERVICE_ROLE_KEY es requerida para storage',
   },
 
