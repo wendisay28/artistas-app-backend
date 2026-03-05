@@ -56,6 +56,7 @@ export class ArtistStorage {
     priceMin?: number;
     priceMax?: number;
     availability?: boolean;
+    userId?: string;
   }): Promise<ArtistWithRelations[]> {
     const userAlias = alias(users, 'user');
     const categoryAlias = alias(categories, 'category');
@@ -66,7 +67,11 @@ export class ArtistStorage {
     // Construir la consulta base con los joins
     const query = this.db
       .select({
-        artist: artists,
+        artist: {
+          ...artists,
+          // Forzar explícitamente el campo description
+          description: artists.description
+        },
         user: userAlias,
         category: categoryAlias,
         discipline: disciplineAlias,
@@ -103,6 +108,10 @@ export class ArtistStorage {
       conditions.push(eq(artists.isAvailable, params.availability));
     }
 
+    if (params?.userId) {
+      conditions.push(eq(artists.userId, params.userId));
+    }
+
     // Aplicar condiciones si existen
     const whereClause = conditions.length > 0 
       ? and(...conditions) 
@@ -114,18 +123,30 @@ export class ArtistStorage {
       : await query;
     
     // Filtrar resultados nulos y mapear a la estructura esperada
-    return results
+    const mappedResults = results
       .filter((result): result is { artist: ArtistType; user: UserType; category: CategoryType | null; discipline: any; role: any; specialization: any } => {
         return result.user !== null;
       })
-      .map(result => ({
-        artist: result.artist,
-        user: result.user,
-        category: result.category || undefined,
-        discipline: result.discipline || undefined,
-        role: result.role || undefined,
-        specialization: result.specialization || undefined
-      }));
+      .map(result => {
+        console.log('🎯 Artists Storage - Datos crudos:', {
+          artistId: result.artist.id,
+          artistName: result.artist.artistName,
+          description: result.artist.description,
+          bio: result.artist.bio
+        });
+        
+        return {
+          artist: result.artist,
+          user: result.user,
+          category: result.category || undefined,
+          discipline: result.discipline || undefined,
+          role: result.role || undefined,
+          specialization: result.specialization || undefined
+        };
+      });
+    
+    console.log('🎯 Artists Storage - Resultados mapeados:', mappedResults.length);
+    return mappedResults;
   }
 
   async createArtist(data: {
@@ -141,6 +162,8 @@ export class ArtistStorage {
     stageName?: string | null;
     gallery?: unknown[];
     socialMedia?: Record<string, unknown>;
+    workExperience?: unknown[] | null;
+    education?: unknown[] | null;
   }) {
     const [artist] = await this.db
       .insert(artists)
@@ -157,6 +180,8 @@ export class ArtistStorage {
         stageName: data.stageName ?? null,
         gallery: Array.isArray(data.gallery) ? data.gallery : [],
         socialMedia: data.socialMedia || {},
+        workExperience: Array.isArray(data.workExperience) ? data.workExperience : [],
+        education: Array.isArray(data.education) ? data.education : [],
         isVerified: false,
         rating: '0',
         totalReviews: 0,

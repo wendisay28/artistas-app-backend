@@ -16,15 +16,46 @@ export const getFeatured = async (req, res) => {
         res.status(500).json({ message: 'Error al obtener artistas destacados' });
     }
 };
-// Obtener todos los artistas
+// Obtener todos los artistas (formato para el explorador del frontend)
 export const getAll = async (req, res) => {
     try {
-        const allArtists = await db
+        // Traer usuarios artistas junto con su perfil de artista
+        const rows = await db
             .select()
             .from(users)
+            .leftJoin(artists, eq(artists.userId, users.id))
             .where(eq(users.userType, 'artist'))
             .orderBy(users.firstName, users.lastName);
-        res.json(allArtists);
+        // Mapear al formato que espera el explorador del frontend
+        const mapped = rows.map(({ users: u, artists: a }) => {
+            const nameParts = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+            const displayName = u.displayName || nameParts || (u.email?.split('@')[0]) || 'Artista';
+            return {
+                id: u.id,
+                type: 'artist',
+                name: displayName,
+                bio: u.bio ?? '',
+                image: u.profileImageUrl ?? '',
+                gallery: [], // sin fotos públicas aún
+                location: u.city ?? 'Colombia',
+                availability: 'Disponible',
+                rating: u.rating ? parseFloat(String(u.rating)) : 4.5,
+                reviews: u.reviewsCount ?? 0,
+                responseTime: '1-2 días',
+                price: a?.pricePerHour ? parseFloat(String(a.pricePerHour)) : 0,
+                verified: u.isVerified ?? false,
+                tags: a?.tags ?? [],
+                services: [],
+                category: a?.stageName ?? 'Artista',
+                experience: a?.yearsOfExperience ? `${a.yearsOfExperience} años` : 'No especificado',
+                style: '',
+                // Campos de perfil completo
+                workExperience: a?.workExperience ?? [],
+                education: a?.education ?? [],
+                socialMedia: u?.socialMedia ?? null,
+            };
+        });
+        res.json({ artists: mapped, total: mapped.length });
     }
     catch (error) {
         console.error('Error fetching all artists:', error);

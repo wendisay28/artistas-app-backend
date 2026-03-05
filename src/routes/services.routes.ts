@@ -62,7 +62,7 @@ servicesRoutes.get('/me', authMiddleware, readUserRateLimit, asyncHandler(async 
  *       200:
  *         description: Servicios obtenidos exitosamente
  */
-// GET /api/v1/services/user/:userId - Obtener servicios de otro usuario (solo activos)
+// GET /api/v1/services/user/:userId - Obtener servicios de otro usuario (todos, no solo activos)
 servicesRoutes.get('/user/:userId', readUserRateLimit, asyncHandler(async (req, res) => {
   const { userId } = req.params;
 
@@ -71,7 +71,7 @@ servicesRoutes.get('/user/:userId', readUserRateLimit, asyncHandler(async (req, 
     .from(services)
     .where(and(
       eq(services.userId, userId),
-      eq(services.isActive, true)
+      isNull(services.companyId)
     ))
     .orderBy(desc(services.createdAt));
 
@@ -206,7 +206,10 @@ servicesRoutes.get('/:id', readUserRateLimit, asyncHandler(async (req, res) => {
 // POST /api/v1/services - Crear nuevo servicio
 servicesRoutes.post('/', authMiddleware, uploadRateLimit, asyncHandler(async (req, res) => {
   const userId = req.user!.id;
-  const { name, description, price, duration, category, images } = req.body;
+  const {
+    name, description, price, currency, duration, category, images,
+    icon, deliveryTag, packageType, includedCount, deliveryDays, weeklyFrequency,
+  } = req.body;
 
   if (!name) {
     throw new AppError(400, 'El nombre del servicio es requerido', true, 'MISSING_NAME');
@@ -219,8 +222,15 @@ servicesRoutes.post('/', authMiddleware, uploadRateLimit, asyncHandler(async (re
       name,
       description: description || null,
       price: price || null,
+      currency: currency || 'COP',
       duration: duration || null,
       category: category || null,
+      icon: icon || 'brush-outline',
+      deliveryTag: deliveryTag || null,
+      packageType: packageType || 'single',
+      includedCount: includedCount || 1,
+      deliveryDays: deliveryDays || 0,
+      weeklyFrequency: weeklyFrequency || null,
       images: images || [],
       isActive: true,
     })
@@ -279,7 +289,10 @@ servicesRoutes.patch('/:id', authMiddleware, moderateUserRateLimit, asyncHandler
     throw new AppError(404, 'Servicio no encontrado', true, 'NOT_FOUND');
   }
 
-  const { name, description, price, duration, category, images, isActive } = req.body;
+  const {
+    name, description, price, currency, duration, category, images, isActive,
+    icon, deliveryTag, packageType, includedCount, deliveryDays, weeklyFrequency,
+  } = req.body;
 
   const updateData: any = {
     updatedAt: new Date(),
@@ -288,8 +301,15 @@ servicesRoutes.patch('/:id', authMiddleware, moderateUserRateLimit, asyncHandler
   if (name !== undefined) updateData.name = name;
   if (description !== undefined) updateData.description = description;
   if (price !== undefined) updateData.price = price;
+  if (currency !== undefined) updateData.currency = currency;
   if (duration !== undefined) updateData.duration = duration;
   if (category !== undefined) updateData.category = category;
+  if (icon !== undefined) updateData.icon = icon;
+  if (deliveryTag !== undefined) updateData.deliveryTag = deliveryTag;
+  if (packageType !== undefined) updateData.packageType = packageType;
+  if (includedCount !== undefined) updateData.includedCount = includedCount;
+  if (deliveryDays !== undefined) updateData.deliveryDays = deliveryDays;
+  if (weeklyFrequency !== undefined) updateData.weeklyFrequency = weeklyFrequency;
   if (images !== undefined) updateData.images = images;
   if (isActive !== undefined) updateData.isActive = isActive;
 

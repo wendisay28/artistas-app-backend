@@ -102,34 +102,38 @@ export const authMiddleware = async (req, res, next) => {
                 .limit(1);
             if (!user) {
                 // Usuario autenticado en Firebase pero no existe en nuestra BD
-                console.log('⚠️ Usuario autenticado pero no registrado en BD, creando automáticamente:', decodedToken.uid);
-                // Crear el usuario automáticamente
-                try {
-                    const newUser = await db.insert(users).values({
-                        id: decodedToken.uid,
-                        email: decodedToken.email || '',
-                        firstName: decodedToken.name?.split(' ')[0] || 'Usuario',
-                        lastName: decodedToken.name?.split(' ').slice(1).join(' ') || '',
-                        userType: 'general',
-                        createdAt: new Date(),
-                        updatedAt: new Date()
-                    }).returning();
-                    console.log('✅ Usuario creado automáticamente en BD');
-                    // Usar el usuario recién creado
-                    const createdUser = newUser[0];
-                    req.user = {
-                        ...createdUser,
-                        userType: (createdUser.userType || 'general')
-                    };
-                }
-                catch (dbError) {
-                    console.error('❌ Error al crear usuario automáticamente:', dbError.message);
-                    return res.status(500).json({
-                        success: false,
-                        error: 'Error al crear usuario',
-                        details: process.env.NODE_ENV === 'development' ? dbError.message : undefined
-                    });
-                }
+                // No crear automáticamente aquí - dejar que el endpoint /auth/sync lo maneje
+                console.log('⚠️ Usuario autenticado pero no registrado en BD, delegando a /auth/sync:', decodedToken.uid);
+                // Crear un objeto de usuario mínimo para el middleware, sin guardar en BD
+                req.user = {
+                    id: decodedToken.uid,
+                    email: decodedToken.email || '',
+                    firstName: decodedToken.name?.split(' ')[0] || 'Usuario',
+                    lastName: decodedToken.name?.split(' ').slice(1).join(' ') || '',
+                    displayName: decodedToken.name || 'Usuario',
+                    profileImageUrl: null,
+                    coverImageUrl: null,
+                    userType: 'general',
+                    bio: null,
+                    city: null,
+                    address: null,
+                    phone: null,
+                    website: null,
+                    socialMedia: null,
+                    isVerified: false,
+                    isFeatured: false,
+                    isAvailable: true,
+                    rating: null,
+                    totalReviews: 0,
+                    fanCount: 0,
+                    preferences: null,
+                    settings: null,
+                    lastActive: null,
+                    onboardingCompleted: false,
+                    onboardingStep: 'user-type-selection',
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                };
             }
             else {
                 // Usando type assertion para resolver temporalmente el conflicto de tipos

@@ -1,30 +1,26 @@
 import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 // Importar controladores de artista
-import { getFeatured as getFeaturedArtists, getAll as getAllArtists, getById as getArtistById } from '../controllers/artist.controller.ts';
+import { getFeatured as getFeaturedArtists, getAll as getAllArtists, getById as getArtistById } from '../controllers/artist.controller.js';
 // Los controladores de eventos ahora se importan desde el módulo events/
-// Importar controladores del blog
-import { getRecentPosts as getBlogRecentPosts } from '../controllers/blog.controller.ts';
 // Importar controladores de usuario
-import { userController } from '../controllers/user.controller.ts';
+import { userController } from '../controllers/user.controller.js';
 // Importar controladores de elementos destacados
-import * as featuredController from '../controllers/featured.controller.ts';
+import * as featuredController from '../controllers/featured.controller.js';
 // Importar controlador del dashboard
-import { dashboardController } from '../controllers/dashboard.controller.ts';
+import { dashboardController } from '../controllers/dashboard.controller.js';
 // Importar rutas del dashboard (comentado - conflicto con activityRoutes que ya maneja /dashboard/stats)
 // import dashboardRoutes from './dashboard.routes.js';
 // Importar controladores de ofertas
-import { offerController } from '../controllers/offer.controller.ts';
+import { offerController } from '../controllers/offer.controller.js';
 // Importar controladores de perfiles
-import { profileController } from '../controllers/profile.controller.ts';
-// Importar rutas del blog
-import blogRoutes from './blog.routes.ts';
+import { profileController } from '../controllers/profile.controller.js';
+// Importar rutas de preferencias
+import preferencesRoutes from './preferences.routes.js';
 // Importar rutas sociales (usuarios sugeridos, tendencias, follows)
 import socialRoutes from './social.routes.js';
 // Importar rutas de contratos y cotizaciones
 import contractsRoutes from './contracts.routes.js';
-// Importar rutas de preferencias
-import preferencesRoutes from './preferences.routes.js';
 // DISABLED: Importar rutas de actividad - Missing service dependencies
 // import activityRoutes from './activity.routes.js';
 // DISABLED: Importar rutas de analytics - Missing service dependencies
@@ -45,6 +41,7 @@ import orderRoutes from './orders.routes.js';
 // import cartRoutes from './cart.routes.js';
 // Importar rutas
 import authRoutes from './auth.routes.js';
+import profileRoutes from './profile.routes.js';
 import homeRoutes from './home.routes.js';
 import explorerRoutes from './explorer.routes.js';
 import hiringRoutes from './hiring.routes.js';
@@ -55,7 +52,6 @@ import onboardingRoutes from './onboarding.routes.js';
 // DISABLED: import artistHierarchyRoutes from './artist-hierarchy.routes.js'; - Controller has complex Drizzle errors
 import documentsRoutes from './documents.routes.js';
 import highlightPhotosRoutes from './highlight-photos.routes.js';
-import servicesRoutes from './services.routes.js';
 import storeRoutes from './store.routes.js';
 import campaignsRoutes from './campaigns.routes.js';
 import bookingsRoutes from './bookings.routes.js';
@@ -64,6 +60,7 @@ import favoritesRoutes from './favorites.routes.js';
 import dislikedItemsRoutes from './dislikedItems.routes.js';
 import uploadRoutes from './upload.routes.js';
 import collectionsRoutes from './collections.routes.js';
+import blogRoutes from './blog.routes.js';
 import { venuesController } from '../controllers/venues.controller.js';
 import { storage } from '../storage/index.js';
 // Crear el enrutador
@@ -185,7 +182,6 @@ router.get('/v1/artists', getAllArtists);
 router.get('/v1/artists/:id', getArtistById);
 // Ruta pública de venues (explorador) - DEBE estar en router, no en v1
 router.get('/v1/venues', venuesController.getAllVenues);
-router.get('/v1/blog', getBlogRecentPosts);
 // Listado de categorías
 router.get('/v1/categories', async (_req, res) => {
     try {
@@ -211,8 +207,6 @@ v1.post('/featured', featuredController.createFeaturedItem);
 v1.put('/featured/:id', featuredController.updateFeaturedItem);
 v1.delete('/featured/:id', featuredController.deleteFeaturedItem);
 // Rutas de perfil (públicas eliminadas; usar protectedRoutes más abajo)
-// Rutas del blog
-v1.use('/posts', blogRoutes);
 // Rutas sociales
 v1.use('/', socialRoutes);
 // Rutas de explorer (públicas - antes del middleware)
@@ -268,10 +262,8 @@ v1.use(statsRoutes);
 v1.use('/documents', documentsRoutes);
 // Rutas de fotos destacadas (highlight photos)
 v1.use('/highlight-photos', highlightPhotosRoutes);
-// Rutas de blog (parcialmente protegidas)
-v1.use('/blog', blogRoutes);
-// Rutas de servicios (parcialmente protegidas)
-v1.use('/services', servicesRoutes);
+// DISABLED: Rutas de servicios (duplicadas - usar explorer/services)
+// v1.use('/services', servicesRoutes);
 // Rutas de tienda/productos (parcialmente protegidas)
 v1.use('/store', storeRoutes);
 // Rutas de campañas (protegidas)
@@ -288,6 +280,9 @@ v1.use('/collections', collectionsRoutes);
 v1.use('/disliked-items', authMiddleware, dislikedItemsRoutes);
 // Rutas de subida de archivos (protegidas)
 v1.use('/upload', uploadRoutes);
+// Rutas de blog/posts (público + protegidas)
+v1.use('/blog', blogRoutes);
+v1.use('/posts', blogRoutes); // Alias para compatibilidad con post.service.ts
 // Nota: Las rutas de eventos están definidas en events.routes.ts
 // Las rutas duplicadas fueron removidas para evitar conflictos
 // Rutas de perfil protegidas
@@ -341,6 +336,7 @@ protectedRoutes.put('/artist/me', (async (req, res) => {
             tags,
             pricePerHour,
             yearsOfExperience,
+            description, // Agregar description al log
         }, null, 2));
         // Saneamiento de inputs
         const safeCategoryId = (() => {
@@ -372,10 +368,7 @@ protectedRoutes.put('/artist/me', (async (req, res) => {
         const found = await storage.getArtists({ userId });
         const existing = found[0];
         console.log('🔍 Buscando artista existente:', { userId, found: found.length, existing: !!existing, existingId: existing?.artist?.id });
-        if (!existing || !existing.artist) {
-            console.log('❌ No se encontró perfil de artista para el usuario:', userId);
-            return res.status(404).json({ message: 'Perfil de artista no encontrado' });
-        }
+        // Si no hay registro de artista, continuar — el bloque "Crear si no existe" lo maneja
         // Normalizar payload parcial permitido
         const artistPayload = {
             artistName,
@@ -430,7 +423,7 @@ protectedRoutes.put('/artist/me', (async (req, res) => {
             pricingType: artistPayload.pricingType,
         }, null, 2));
         // Crear si no existe
-        if (!existing) {
+        if (!existing || !existing.artist) {
             const created = await storage.createArtist({
                 userId,
                 artistName: artistPayload.artistName || 'Sin título',
@@ -452,14 +445,22 @@ protectedRoutes.put('/artist/me', (async (req, res) => {
                 pricePerHour: artistPayload.pricePerHour,
                 yearsOfExperience: artistPayload.yearsOfExperience,
                 portfolio: artistPayload.portfolio,
+                // Campos clave que faltaban en la creación
+                workExperience: artistPayload.workExperience,
+                education: artistPayload.education,
             });
             return res.json(created);
         }
         // Actualizar si existe
         // Limpiar campos undefined del payload (Postgres no acepta undefined)
         const cleanPayload = Object.fromEntries(Object.entries(artistPayload).filter(([_, v]) => v !== undefined));
+        // Si se está actualizando description, también actualizar bio para consistencia
+        if (cleanPayload.description) {
+            cleanPayload.bio = cleanPayload.description;
+        }
         console.log('🧹 cleanPayload después de filtrar undefined:', JSON.stringify(cleanPayload, null, 2));
         console.log('🔑 cleanPayload keys:', Object.keys(cleanPayload));
+        console.log('📝 DESCRIPTION específico:', cleanPayload.description);
         const updated = await storage.updateArtist(existing.artist.id, cleanPayload);
         return res.json(updated);
     }
@@ -494,6 +495,8 @@ v1.patch('/offers/:id/status', offerController.updateStatus);
 v1.get('/profiles', profileController.getAll);
 v1.get('/profiles/:id', profileController.getById);
 v1.get('/profiles/:id/reviews', profileController.getReviews);
+// Montar profile routes para /me/reviews
+v1.use('/profile', profileRoutes);
 // Montar rutas protegidas en v1
 v1.use(protectedRoutes);
 // DISABLED: Montar activityRoutes sin prefijo para rutas con paths completos

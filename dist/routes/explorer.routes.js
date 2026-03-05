@@ -22,6 +22,9 @@ explorerRoutes.get('/services/me', authMiddleware, ExplorerController.getUserSer
 explorerRoutes.post('/services', authMiddleware, ExplorerController.createService);
 explorerRoutes.patch('/services/:id', authMiddleware, ExplorerController.updateService);
 explorerRoutes.delete('/services/:id', authMiddleware, ExplorerController.deleteService);
+// Rutas públicas de servicios
+explorerRoutes.get('/services/user/:userId', ExplorerController.getUserServicesById);
+explorerRoutes.get('/services/:id', ExplorerController.getServiceById);
 // Rutas protegidas - Obras de arte del usuario
 explorerRoutes.get('/artworks/me', authMiddleware, ExplorerController.getUserArtworks);
 explorerRoutes.post('/artworks', authMiddleware, ExplorerController.createArtwork);

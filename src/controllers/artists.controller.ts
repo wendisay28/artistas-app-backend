@@ -23,6 +23,7 @@ export const artistsController = {
         profession: '', // No hay campo profession en el schema
         category: artist.category?.name || '',
         bio: artist.artist.bio,
+        description: artist.artist.description,
         city: artist.artist.baseCity, // Usar baseCity en lugar de city
         coordinates: null, // No hay campo coordinates en el schema
         isAvailable: artist.artist.isAvailable,
@@ -68,26 +69,47 @@ export const artistsController = {
       });
 
       // Transform to frontend format
-      const artistsData = artists.map(artist => ({
-        id: artist.artist.id,
-        userId: artist.artist.userId,
-        name: artist.artist.artistName || artist.user.displayName || 'Sin nombre',
-        profession: '', // No hay campo profession en el schema
-        category: artist.category?.name || '',
-        bio: artist.artist.bio,
-        city: artist.artist.baseCity, // Usar baseCity en lugar de city
-        coordinates: null, // No hay campo coordinates en el schema
-        isAvailable: artist.artist.isAvailable,
-        rating: artist.artist.rating ? Number(artist.artist.rating) : 0,
-        totalReviews: artist.artist.totalReviews || 0,
-        profileImageUrl: artist.user.profileImageUrl, // Usar profileImageUrl del user
-        tags: artist.artist.tags || [],
-        hourlyRate: artist.artist.hourlyRate ? Number(artist.artist.hourlyRate) : 0,
-        pricingType: artist.artist.pricingType || 'depends',
-        availability: artist.artist.availability,
-        createdAt: artist.artist.createdAt,
-        updatedAt: artist.artist.updatedAt,
-      }));
+      const artistsData = artists.map(artist => {
+        console.log('🎯 Artists Controller - Datos de artista:', {
+          id: artist.artist.id,
+          name: artist.artist.artistName,
+          description: artist.artist.description,
+          bio: artist.artist.bio
+        });
+
+        const metadata = (artist.artist as any)?.metadata as Record<string, any> | undefined;
+        
+        return {
+          id: artist.artist.id,
+          userId: artist.artist.userId,
+          name: artist.artist.artistName || artist.user.displayName || 'Sin nombre',
+          profession: '',
+          category: artist.category?.name || '',
+          categoryId: artist.category?.code,
+          disciplineId: artist.discipline?.code,
+          roleId: artist.role?.code,
+          specialty: metadata?.specialty,
+          niche: metadata?.niche,
+          bio: artist.artist.bio,
+          description: artist.artist.description,
+          city: artist.artist.baseCity,
+          coordinates: null,
+          isAvailable: artist.artist.isAvailable,
+          rating: artist.artist.rating ? Number(artist.artist.rating) : 0,
+          totalReviews: artist.artist.totalReviews || 0,
+          profileImageUrl: artist.user.profileImageUrl,
+          tags: artist.artist.tags || [],
+          hourlyRate: artist.artist.hourlyRate ? Number(artist.artist.hourlyRate) : 0,
+          pricingType: artist.artist.pricingType || 'depends',
+          availability: artist.artist.availability,
+          createdAt: artist.artist.createdAt,
+          updatedAt: artist.artist.updatedAt,
+          workExperience: artist.artist.workExperience || [],
+          education: artist.artist.education || [],
+          socialMedia: (artist.user as any).socialMedia || null,
+          yearsOfExperience: artist.artist.yearsOfExperience,
+        };
+      });
 
       res.json(artistsData);
     } catch (error) {
@@ -110,25 +132,37 @@ export const artistsController = {
       }
 
       // Transform to frontend format
+      const metadata = (artist.artist as any)?.metadata as Record<string, any> | undefined;
       const artistData = {
         id: artist.artist.id,
         userId: artist.artist.userId,
         name: artist.artist.artistName || artist.user.displayName || 'Sin nombre',
         profession: '', // No hay campo profession en el schema
         category: artist.category?.name || '',
+        categoryId: artist.category?.code,
+        disciplineId: artist.discipline?.code,
+        roleId: artist.role?.code,
+        specialty: metadata?.specialty,
+        niche: metadata?.niche,
         bio: artist.artist.bio,
+        description: artist.artist.description,
         city: artist.artist.baseCity, // Usar baseCity en lugar de city
         coordinates: null, // No hay campo coordinates en el schema
         isAvailable: artist.artist.isAvailable,
         rating: artist.artist.rating ? Number(artist.artist.rating) : 0,
         totalReviews: artist.artist.totalReviews || 0,
-        profileImageUrl: artist.user.profileImageUrl, // Usar profileImageUrl del user
+        profileImageUrl: artist.user.profileImageUrl,
         tags: artist.artist.tags || [],
         hourlyRate: artist.artist.hourlyRate ? Number(artist.artist.hourlyRate) : 0,
         pricingType: artist.artist.pricingType || 'depends',
         availability: artist.artist.availability,
         createdAt: artist.artist.createdAt,
         updatedAt: artist.artist.updatedAt,
+        // Campos de perfil completo
+        workExperience: artist.artist.workExperience || [],
+        education: artist.artist.education || [],
+        socialMedia: (artist.user as any).socialMedia || null,
+        yearsOfExperience: artist.artist.yearsOfExperience,
       };
 
       res.json(artistData);

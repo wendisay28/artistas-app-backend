@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../db.js';
-import { and, eq, gte, lte, or, sql, SQL, desc, inArray, ilike } from 'drizzle-orm';
+import { and, eq, gte, lte, or, sql, SQL, desc, inArray, ilike, isNull } from 'drizzle-orm';
 import { users, artists, events, venues, services, artworks, categories, highlightPhotos } from '../schema.js';
 
 /**
@@ -110,6 +110,7 @@ class ExplorerController {
           profileImageUrl: users.profileImageUrl,
           city: users.city,
           bio: users.bio,
+          description: artists.description,
           rating: users.rating,
           totalReviews: users.totalReviews,
           userType: users.userType,
@@ -637,7 +638,7 @@ class ExplorerController {
         .where(eq(services.userId, userId))
         .orderBy(desc(services.createdAt));
 
-      res.status(200).json(userServices);
+      res.status(200).json({ success: true, data: userServices });
     } catch (error: any) {
       console.error('Error al obtener servicios del usuario:', error);
       res.status(500).json({
@@ -659,7 +660,10 @@ class ExplorerController {
         return res.status(401).json({ message: 'Usuario no autenticado' });
       }
 
-      const { name, description, price, duration, category, images } = req.body;
+      const { 
+        name, description, price, currency, duration, category, images,
+        icon, deliveryTag, packageType, includedCount, deliveryDays, weeklyFrequency,
+      } = req.body;
 
       if (!name) {
         return res.status(400).json({ message: 'El nombre del servicio es requerido' });
@@ -672,14 +676,21 @@ class ExplorerController {
           name,
           description: description || null,
           price: price || null,
+          currency: currency || 'COP',
           duration: duration || null,
           category: category || null,
+          icon: icon || 'brush-outline',
+          deliveryTag: deliveryTag || null,
+          packageType: packageType || 'single',
+          includedCount: includedCount || 1,
+          deliveryDays: deliveryDays || 0,
+          weeklyFrequency: weeklyFrequency || null,
           images: images || [],
           isActive: true,
         })
         .returning();
 
-      res.status(201).json(newService);
+      res.status(201).json({ success: true, data: newService });
     } catch (error: any) {
       console.error('Error al crear servicio:', error);
       res.status(500).json({
@@ -717,13 +728,23 @@ class ExplorerController {
       }
 
       const updateData: any = {};
-      const { name, description, price, duration, category, images, isActive } = req.body;
+      const { 
+        name, description, price, currency, duration, category, images, isActive,
+        icon, deliveryTag, packageType, includedCount, deliveryDays, weeklyFrequency,
+      } = req.body;
 
       if (name !== undefined) updateData.name = name;
       if (description !== undefined) updateData.description = description;
       if (price !== undefined) updateData.price = price;
+      if (currency !== undefined) updateData.currency = currency;
       if (duration !== undefined) updateData.duration = duration;
       if (category !== undefined) updateData.category = category;
+      if (icon !== undefined) updateData.icon = icon;
+      if (deliveryTag !== undefined) updateData.deliveryTag = deliveryTag;
+      if (packageType !== undefined) updateData.packageType = packageType;
+      if (includedCount !== undefined) updateData.includedCount = includedCount;
+      if (deliveryDays !== undefined) updateData.deliveryDays = deliveryDays;
+      if (weeklyFrequency !== undefined) updateData.weeklyFrequency = weeklyFrequency;
       if (images !== undefined) updateData.images = images;
       if (isActive !== undefined) updateData.isActive = isActive;
       updateData.updatedAt = new Date();
@@ -734,7 +755,7 @@ class ExplorerController {
         .where(eq(services.id, serviceId))
         .returning();
 
-      res.status(200).json(updatedService);
+      res.status(200).json({ success: true, data: updatedService });
     } catch (error: any) {
       console.error('Error al actualizar servicio:', error);
       res.status(500).json({
@@ -775,11 +796,83 @@ class ExplorerController {
         .delete(services)
         .where(eq(services.id, serviceId));
 
-      res.status(200).json({ message: 'Servicio eliminado correctamente' });
+      res.status(200).json({ success: true, message: 'Servicio eliminado correctamente' });
     } catch (error: any) {
       console.error('Error al eliminar servicio:', error);
       res.status(500).json({
         message: 'Error al eliminar servicio',
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Obtiene servicios de un usuario específico (público)
+   * GET /api/v1/explorer/services/user/:userId
+   */
+  static async getUserServicesById(req: Request, res: Response) {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        return res.status(400).json({ message: 'ID de usuario requerido' });
+      }
+
+      const userServices = await db
+        .select()
+        .from(services)
+        .where(and(eq(services.userId, userId), isNull(services.companyId)))
+        .orderBy(desc(services.createdAt));
+
+      res.status(200).json({ success: true, data: userServices });
+    } catch (error: any) {
+      console.error('Error al obtener servicios del usuario:', error);
+      res.status(500).json({
+        message: 'Error al obtener servicios',
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Obtiene un servicio por ID (público)
+   * GET /api/v1/explorer/services/:id
+   */
+  static async getServiceById(req: Request, res: Response) {
+    try {
+      const serviceId = parseInt(req.params.id);
+
+      if (isNaN(serviceId)) {
+        return res.status(400).json({ message: 'ID de servicio inválido' });
+      }
+
+      const [service] = await db
+        .select({
+          id: services.id,
+          userId: services.userId,
+          name: services.name,
+          description: services.description,
+          price: services.price,
+          duration: services.duration,
+          category: services.category,
+          images: services.images,
+          isActive: services.isActive,
+          createdAt: services.createdAt,
+          updatedAt: services.updatedAt,
+        })
+        .from(services)
+        .where(and(eq(services.id, serviceId), eq(services.isActive, true)))
+        .limit(1);
+
+      if (!service) {
+        return res.status(404).json({ message: 'Servicio no encontrado' });
+      }
+
+      res.status(200).json({ success: true, data: service });
+    } catch (error: any) {
+      console.error('Error al obtener servicio:', error);
+      res.status(500).json({
+        message: 'Error al obtener servicio',
         error: error.message,
       });
     }
@@ -1080,10 +1173,13 @@ class ExplorerController {
         .limit(Number(limit));
 
       res.status(200).json({
-        artists: topArtists,
-        events: upcomingEvents,
-        venues: topVenues,
-        artworks: topArtworks,
+        success: true,
+        data: {
+          artists: topArtists,
+          events: upcomingEvents,
+          venues: topVenues,
+          artworks: topArtworks,
+        }
       });
     } catch (error: any) {
       console.error('Error al obtener datos del explorador:', error);
@@ -1103,7 +1199,7 @@ class ExplorerController {
       const { q, limit = '5' } = req.query;
 
       if (!q || typeof q !== 'string' || q.trim().length < 2) {
-        return res.json([]);
+        return res.json({ success: true, data: [] });
       }
 
       const searchQuery = `%${q.trim()}%`;
@@ -1131,7 +1227,7 @@ class ExplorerController {
         LIMIT ${limitNum}
       `);
 
-      res.json((results as any).rows || results);
+      res.json({ success: true, data: (results as any).rows || results });
     } catch (error: any) {
       console.error('Error searching artists:', error);
       res.status(500).json({ message: 'Error al buscar artistas', error: error.message });

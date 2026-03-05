@@ -184,6 +184,36 @@ export async function registerRoutes(app) {
             res.status(500).json({ message: 'Failed to fetch user' });
         }
     });
+    app.get('/api/users/me', requireAuth, async (req, res) => {
+        try {
+            const userId = req.user.id || req.user.claims?.sub;
+            const user = await storage.getUser(userId);
+            if (!user) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            res.json(user);
+        }
+        catch (error) {
+            console.error('Error fetching current user:', error);
+            res.status(500).json({ message: 'Failed to fetch current user' });
+        }
+    });
+    app.get('/api/users/me/setup-status', requireAuth, async (req, res) => {
+        try {
+            const userId = req.user.id || req.user.claims?.sub;
+            const user = await storage.getUser(userId);
+            if (!user) {
+                return res.status(404).json({ message: 'User not found' });
+            }
+            // Check if user has completed basic profile setup
+            const isComplete = !!(user.firstName && user.lastName && user.userType);
+            res.json({ isComplete });
+        }
+        catch (error) {
+            console.error('Error checking profile setup status:', error);
+            res.status(500).json({ message: 'Failed to check setup status' });
+        }
+    });
     app.post('/api/users', async (req, res) => {
         try {
             const { uid, id, email, firstName, lastName, photoURL, profileImageUrl, userType, bio, city, isVerified } = req.body || {};
@@ -266,6 +296,18 @@ export async function registerRoutes(app) {
         }
     });
     // Reviews routes
+    app.get('/api/reviews/me', requireAuth, async (req, res) => {
+        try {
+            const userId = req.user.id || req.user.claims?.sub;
+            // Usar el método existente del controlador de perfiles
+            const reviews = await storage.reviews.getReviews('artist', parseInt(userId));
+            res.json(reviews);
+        }
+        catch (error) {
+            console.error('Error fetching user reviews:', error);
+            res.status(500).json({ error: 'Failed to fetch user reviews' });
+        }
+    });
     app.post('/api/reviews', requireAuth, async (req, res) => {
         try {
             const { targetType, targetId, score, reason } = req.body;

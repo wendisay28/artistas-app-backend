@@ -1,5 +1,8 @@
 import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { db } from '../db.js';
+import { categories, disciplines, roles } from '../schema.js';
+import { eq } from 'drizzle-orm';
 
 // Importar controladores de artista
 import { 
@@ -338,8 +341,8 @@ v1.use('/documents', documentsRoutes);
 // Rutas de fotos destacadas (highlight photos)
 v1.use('/highlight-photos', highlightPhotosRoutes);
 
-// Rutas de servicios (parcialmente protegidas)
-v1.use('/services', servicesRoutes);
+// DISABLED: Rutas de servicios (duplicadas - usar explorer/services)
+// v1.use('/services', servicesRoutes);
 
 // Rutas de tienda/productos (parcialmente protegidas)
 v1.use('/store', storeRoutes);
@@ -375,6 +378,7 @@ v1.use('/posts', blogRoutes); // Alias para compatibilidad con post.service.ts
 // Rutas de perfil protegidas
 protectedRoutes.get('/profile', userController.getProfile as RouteHandler);
 protectedRoutes.put('/profile', userController.updateProfile as RouteHandler);
+protectedRoutes.patch('/profile', userController.updateProfile as RouteHandler);
 protectedRoutes.patch('/profile/type', userController.updateUserType as RouteHandler);
 
 // Rutas de usuario autenticado (/users/me)
@@ -433,6 +437,12 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       artistType,
       travelAvailability,
       travelDistance,
+      // Texto libre (se guardan en metadata)
+      specialty,
+      niche,
+      style,
+      artistAvailability,
+      responseTime,
       // Precios
       hourlyRate,
       pricingType,
@@ -444,30 +454,59 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       categoryId,
       disciplineId,
       roleId,
-      specializationId,
-      additionalTalents,
-      customStats,
-      tags,
-      pricePerHour,
-      yearsOfExperience,
+      specialty,
+      niche,
+      style,
+      artistAvailability,
+      responseTime,
     }, null, 2));
 
-    // Saneamiento de inputs
-    const safeCategoryId = (() => {
-      if (typeof categoryId === 'number') {
-        return Number.isFinite(categoryId) ? categoryId : undefined;
-      }
+    // Saneamiento de inputs — acepta tanto IDs enteros como slugs (codes)
+    const resolveCategoryId = async (): Promise<number | undefined> => {
+      if (typeof categoryId === 'number') return Number.isFinite(categoryId) ? categoryId : undefined;
       if (typeof categoryId === 'string') {
         const trimmed = categoryId.trim();
         if (!trimmed) return undefined;
         const parsed = Number(trimmed);
-        return Number.isFinite(parsed) ? parsed : undefined;
+        if (Number.isFinite(parsed)) return parsed;
+        // Es un slug — buscar por code
+        const [row] = await db.select({ id: categories.id }).from(categories).where(eq(categories.code, trimmed)).limit(1);
+        return row?.id;
       }
       return undefined;
-    })();
+    };
 
-    const safeDisciplineId = typeof disciplineId === 'number' ? disciplineId : undefined;
-    const safeRoleId = typeof roleId === 'number' ? roleId : undefined;
+    const resolveDisciplineId = async (): Promise<number | undefined> => {
+      if (typeof disciplineId === 'number') return Number.isFinite(disciplineId) ? disciplineId : undefined;
+      if (typeof disciplineId === 'string') {
+        const trimmed = disciplineId.trim();
+        if (!trimmed) return undefined;
+        const parsed = Number(trimmed);
+        if (Number.isFinite(parsed)) return parsed;
+        const [row] = await db.select({ id: disciplines.id }).from(disciplines).where(eq(disciplines.code, trimmed)).limit(1);
+        return row?.id;
+      }
+      return undefined;
+    };
+
+    const resolveRoleId = async (): Promise<number | undefined> => {
+      if (typeof roleId === 'number') return Number.isFinite(roleId) ? roleId : undefined;
+      if (typeof roleId === 'string') {
+        const trimmed = roleId.trim();
+        if (!trimmed) return undefined;
+        const parsed = Number(trimmed);
+        if (Number.isFinite(parsed)) return parsed;
+        const [row] = await db.select({ id: roles.id }).from(roles).where(eq(roles.code, trimmed)).limit(1);
+        return row?.id;
+      }
+      return undefined;
+    };
+
+    const [safeCategoryId, safeDisciplineId, safeRoleId] = await Promise.all([
+      resolveCategoryId(),
+      resolveDisciplineId(),
+      resolveRoleId(),
+    ]);
     const safeSpecializationId = typeof specializationId === 'number' ? specializationId : undefined;
     const safeAdditionalTalents = Array.isArray(additionalTalents)
       ? additionalTalents.filter((t: any) => typeof t === 'number')
@@ -486,10 +525,7 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
 
     console.log('🔍 Buscando artista existente:', { userId, found: found.length, existing: !!existing, existingId: existing?.artist?.id });
 
-    if (!existing || !existing.artist) {
-      console.log('❌ No se encontró perfil de artista para el usuario:', userId);
-      return res.status(404).json({ message: 'Perfil de artista no encontrado' });
-    }
+    // Si no hay registro de artista, continuar — el bloque "Crear si no existe" lo maneja
 
     // Normalizar payload parcial permitido
     const artistPayload: Partial<typeof import('../schema.js').artists.$inferInsert> = {
@@ -527,6 +563,15 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       hourlyRate: typeof hourlyRate === 'number' ? hourlyRate.toString() : undefined,
       pricingType: pricingType ? pricingType : undefined,
       priceRange: priceRange && typeof priceRange === 'object' ? priceRange : undefined,
+      // Texto libre: guardar en metadata junto con lo que ya haya
+      metadata: (specialty || niche || style || artistAvailability || responseTime) ? {
+        ...(existing?.artist?.metadata as object || {}),
+        ...(typeof specialty === 'string' && specialty ? { specialty } : {}),
+        ...(typeof niche === 'string' && niche ? { niche } : {}),
+        ...(typeof style === 'string' && style ? { style } : {}),
+        ...(typeof artistAvailability === 'string' && artistAvailability ? { artistAvailability } : {}),
+        ...(typeof responseTime === 'string' && responseTime ? { responseTime } : {}),
+      } : undefined,
     };
 
     console.log('🟢 artistPayload procesado:', JSON.stringify({
@@ -534,20 +579,13 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       categoryId: artistPayload.categoryId,
       disciplineId: artistPayload.disciplineId,
       roleId: artistPayload.roleId,
-      specializationId: artistPayload.specializationId,
-      additionalTalents: artistPayload.additionalTalents,
-      safeCategoryId,
-      tags: artistPayload.tags,
-      pricePerHour: artistPayload.pricePerHour,
-      workExperience: artistPayload.workExperience,
-      education: artistPayload.education,
-      languages: artistPayload.languages,
-      hourlyRate: artistPayload.hourlyRate,
-      pricingType: artistPayload.pricingType,
+      specialty: (artistPayload.metadata && typeof artistPayload.metadata === 'object') ? (artistPayload.metadata as any).specialty || '' : '',
+      niche: (artistPayload.metadata && typeof artistPayload.metadata === 'object') ? (artistPayload.metadata as any).niche || '' : '',
+      metadata: artistPayload.metadata,
     }, null, 2));
 
     // Crear si no existe
-    if (!existing) {
+    if (!existing || !existing.artist) {
       const created = await storage.createArtist({
         userId,
         artistName: artistPayload.artistName || 'Sin título',
@@ -569,6 +607,9 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
         pricePerHour: artistPayload.pricePerHour as any,
         yearsOfExperience: artistPayload.yearsOfExperience as any,
         portfolio: artistPayload.portfolio as any,
+        // Campos clave que faltaban en la creación
+        workExperience: artistPayload.workExperience as any,
+        education: artistPayload.education as any,
       } as any);
       return res.json(created);
     }
@@ -579,8 +620,14 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       Object.entries(artistPayload).filter(([_, v]) => v !== undefined)
     );
 
+    // Si se está actualizando description, también actualizar bio para consistencia
+    if (cleanPayload.description) {
+      cleanPayload.bio = cleanPayload.description;
+    }
+
     console.log('🧹 cleanPayload después de filtrar undefined:', JSON.stringify(cleanPayload, null, 2));
     console.log('🔑 cleanPayload keys:', Object.keys(cleanPayload));
+    console.log('📝 DESCRIPTION específico:', cleanPayload.description);
 
     const updated = await storage.updateArtist(existing.artist.id, cleanPayload as any);
     return res.json(updated);

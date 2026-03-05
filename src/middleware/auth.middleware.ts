@@ -151,39 +151,39 @@ export const authMiddleware = async (
 
       if (!user) {
         // Usuario autenticado en Firebase pero no existe en nuestra BD
-        console.log('⚠️ Usuario autenticado pero no registrado en BD, creando automáticamente:', decodedToken.uid);
+        // No crear automáticamente aquí - dejar que el endpoint /auth/sync lo maneje
+        console.log('⚠️ Usuario autenticado pero no registrado en BD, delegando a /auth/sync:', decodedToken.uid);
         
-        // Crear el usuario automáticamente (ON CONFLICT para evitar race condition)
-        try {
-          const newUser = await db.insert(users).values({
-            id: decodedToken.uid,
-            email: (decodedToken as any).email || '',
-            firstName: (decodedToken as any).name?.split(' ')[0] || 'Usuario',
-            lastName: (decodedToken as any).name?.split(' ').slice(1).join(' ') || '',
-            userType: 'general',
-            createdAt: new Date(),
-            updatedAt: new Date()
-          }).onConflictDoUpdate({
-            target: users.id,
-            set: { updatedAt: new Date() }
-          }).returning();
-          
-          console.log('✅ Usuario creado automáticamente en BD');
-          
-          // Usar el usuario recién creado
-          const createdUser = newUser[0];
-          req.user = {
-            ...createdUser,
-            userType: (createdUser.userType || 'general') as 'artist' | 'general' | 'company'
-          } as UserWithId;
-        } catch (dbError: any) {
-          console.error('❌ Error al crear usuario automáticamente:', dbError.message);
-          return res.status(500).json({
-            success: false,
-            error: 'Error al crear usuario',
-            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined
-          });
-        }
+        // Crear un objeto de usuario mínimo para el middleware, sin guardar en BD
+        req.user = {
+          id: decodedToken.uid,
+          email: (decodedToken as any).email || '',
+          firstName: (decodedToken as any).name?.split(' ')[0] || 'Usuario',
+          lastName: (decodedToken as any).name?.split(' ').slice(1).join(' ') || '',
+          displayName: (decodedToken as any).name || 'Usuario',
+          profileImageUrl: null,
+          coverImageUrl: null,
+          userType: 'general' as 'artist' | 'general' | 'company',
+          bio: null,
+          city: null,
+          address: null,
+          phone: null,
+          website: null,
+          socialMedia: null,
+          isVerified: false,
+          isFeatured: false,
+          isAvailable: true,
+          rating: null,
+          totalReviews: 0,
+          fanCount: 0,
+          preferences: null,
+          settings: null,
+          lastActive: null,
+          onboardingCompleted: false,
+          onboardingStep: 'user-type-selection',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        } as UserWithId;
       } else {
         // Usando type assertion para resolver temporalmente el conflicto de tipos
         req.user = {

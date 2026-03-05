@@ -156,8 +156,7 @@ export class DatabaseStorage {
     }
     async getArtists(filters = {}) {
         // Delegate to ArtistStorage which includes discipline, role, specialization joins
-        // Map filters to the expected format
-        return this.artistStorage.getArtists({});
+        return this.artistStorage.getArtists({ userId: filters.userId });
     }
     async createArtist(artistData) {
         try {
@@ -186,6 +185,7 @@ export class DatabaseStorage {
             const cleanData = Object.fromEntries(Object.entries(artistData).filter(([_, v]) => v !== undefined));
             console.log('🧹 storage.updateArtist - cleanData DESPUÉS de limpiar:', Object.keys(cleanData));
             console.log('🧹 storage.updateArtist - cleanData valores:', JSON.stringify(cleanData, null, 2));
+            console.log('📝 DESCRIPTION en storage:', cleanData.description);
             const [updatedArtist] = await this.db
                 .update(artists)
                 .set({

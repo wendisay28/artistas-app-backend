@@ -124,6 +124,7 @@ export class DatabaseStorage implements IStorage {
       city: string | null;
       isVerified: boolean;
       onboardingCompleted: boolean;
+      socialMedia: Record<string, string | undefined>;
     }>
   ): Promise<UserWithRelations> {
     const now = new Date();
@@ -151,6 +152,7 @@ export class DatabaseStorage implements IStorage {
       if (user.city !== undefined) updateData.city = user.city;
       if (user.isVerified !== undefined) updateData.isVerified = user.isVerified;
       if (user.onboardingCompleted !== undefined) updateData.onboardingCompleted = user.onboardingCompleted;
+      if (user.socialMedia !== undefined) updateData.socialMedia = user.socialMedia;
       
       const [result] = await this.db
         .update(users)
@@ -172,6 +174,7 @@ export class DatabaseStorage implements IStorage {
           userType: user.userType ?? 'general',
           bio: user.bio ?? null,
           city: user.city ?? null,
+          socialMedia: user.socialMedia ?? {},
           isVerified: user.isVerified ?? false,
           createdAt: now,
           updatedAt: now
@@ -227,8 +230,7 @@ export class DatabaseStorage implements IStorage {
 
   async getArtists(filters: { categoryId?: number; userId?: string } = {}): Promise<ArtistWithRelations[]> {
     // Delegate to ArtistStorage which includes discipline, role, specialization joins
-    // Map filters to the expected format
-    return this.artistStorage.getArtists({}) as any;
+    return this.artistStorage.getArtists({ userId: filters.userId }) as any;
   }
 
   async createArtist(artistData: Omit<typeof artists.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof artists.$inferSelect> {
@@ -267,6 +269,7 @@ export class DatabaseStorage implements IStorage {
 
       console.log('🧹 storage.updateArtist - cleanData DESPUÉS de limpiar:', Object.keys(cleanData));
       console.log('🧹 storage.updateArtist - cleanData valores:', JSON.stringify(cleanData, null, 2));
+      console.log('📝 DESCRIPTION en storage:', cleanData.description);
 
       const [updatedArtist] = await this.db
         .update(artists)

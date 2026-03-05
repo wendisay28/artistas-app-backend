@@ -388,10 +388,55 @@ export const getPublicProfile = async (req, res) => {
         res.status(500).json({ message: 'Error al obtener el perfil público' });
     }
 };
+// Obtener mis reseñas (usuario autenticado)
+export const getMyReviews = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { limit = '10', offset = '0' } = req.query;
+        // Validar paginación - máximo 100 items por página
+        const limitNum = Math.min(Number(limit) || 10, 100);
+        const offsetNum = Math.max(Number(offset) || 0, 0);
+        // Obtener reseñas del usuario autenticado
+        const myReviews = await db
+            .select({
+            id: reviews.id,
+            userId: reviews.userId,
+            score: reviews.score,
+            comment: reviews.reason,
+            type: reviews.type,
+            createdAt: reviews.createdAt
+        })
+            .from(reviews)
+            .where(eq(reviews.userId, userId))
+            .limit(limitNum)
+            .offset(offsetNum);
+        // Obtener estadísticas de calificaciones
+        const [ratingStats] = await db
+            .select({
+            average: sql `COALESCE(AVG(score), 0) as average`,
+            count: sql `COUNT(*) as count`,
+        })
+            .from(reviews)
+            .where(eq(reviews.userId, userId));
+        res.json({
+            reviews: myReviews,
+            stats: {
+                averageRating: ratingStats?.average ? parseFloat(String(ratingStats.average)) : 0,
+                totalReviews: ratingStats?.count ? parseInt(String(ratingStats.count)) : 0,
+                ratingDistribution: []
+            }
+        });
+    }
+    catch (error) {
+        console.error('Error al obtener mis reseñas:', error);
+        res.status(500).json({ message: 'Error al obtener mis reseñas' });
+    }
+};
 // Controlador para compatibilidad con rutas
 export const profileController = {
     getAll: getProfiles,
     getById: getProfileById,
     getReviews: getProfileReviews,
+    getMyReviews: getMyReviews,
     getPublic: getPublicProfile
 };

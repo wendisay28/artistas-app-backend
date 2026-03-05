@@ -19,6 +19,11 @@
     "db:add-indices": "tsx scripts/add-indices.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:artists": "tsx scripts/seed-artists.ts",
+    "clear-artists": "tsx scripts/clear-artists-preview.ts",
+    "clear-artists-confirm": "tsx scripts/clear-artists-confirm.ts",
+    "clear-artists-complete": "tsx scripts/clear-artists-complete.ts",
+    "clear-all-users": "tsx scripts/clear-all-users-preview.ts",
+    "clear-all-users-confirm": "tsx scripts/clear-all-users-confirm.ts",
     "migrate:custom": "NODE_OPTIONS='--loader ts-node/esm' scripts/migrate.ts",
     "migrate:explorer": "tsx src/scripts/run-explorer-migration-pg.ts"
   },

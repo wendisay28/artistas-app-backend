@@ -90,9 +90,11 @@ export const userController = {
       if (!userId) return res.status(401).json({ message: 'No autenticado' });
       const {
         email,
-        firstName,
-        lastName,
+        displayName,
+        firstName: rawFirstName,
+        lastName: rawLastName,
         username,
+        photoURL,
         profileImageUrl,
         coverImageUrl,
         bio,
@@ -100,26 +102,41 @@ export const userController = {
         address,
         isVerified,
         userType,
+        role,
         onboardingCompleted,
+        socialMedia,
       } = req.body || {};
 
-      // Validar userType opcionalmente
+      // Resolver firstName/lastName desde displayName si no vienen explícitos
+      let firstName = rawFirstName;
+      let lastName = rawLastName;
+      if (!firstName && displayName) {
+        const parts = displayName.trim().split(' ');
+        firstName = parts[0] ?? '';
+        lastName = parts.slice(1).join(' ') || undefined;
+      }
+
+      // Validar userType opcionalmente (acepta también "role" que envía el onboarding)
+      const rawUserType = userType ?? role;
       let safeUserType: 'general' | 'artist' | 'company' | undefined = undefined as any;
-      if (userType !== undefined) {
+      if (rawUserType !== undefined) {
         const allowed = ['general', 'artist', 'company'];
-        if (!allowed.includes(userType)) {
+        if (!allowed.includes(rawUserType)) {
           return res.status(400).json({ message: 'userType inválido' });
         }
-        safeUserType = userType;
+        safeUserType = rawUserType;
       }
 
       // Build update object with only defined values
       const updateData: any = { id: userId };
       if (email !== undefined) updateData.email = email;
+      if (displayName !== undefined) updateData.displayName = displayName;
       if (firstName !== undefined && firstName !== null) updateData.firstName = firstName;
       if (lastName !== undefined && lastName !== null) updateData.lastName = lastName;
       if (username !== undefined && username !== null) updateData.username = username;
-      if (profileImageUrl !== undefined) updateData.profileImageUrl = profileImageUrl;
+      // photoURL es alias de profileImageUrl (lo usa el onboarding)
+      const resolvedImageUrl = profileImageUrl ?? photoURL;
+      if (resolvedImageUrl !== undefined) updateData.profileImageUrl = resolvedImageUrl;
       if (coverImageUrl !== undefined) updateData.coverImageUrl = coverImageUrl;
       if (bio !== undefined) updateData.bio = bio;
       if (city !== undefined) updateData.city = city;
@@ -127,6 +144,7 @@ export const userController = {
       if (isVerified !== undefined) updateData.isVerified = isVerified;
       if (safeUserType !== undefined) updateData.userType = safeUserType;
       if (onboardingCompleted !== undefined) updateData.onboardingCompleted = onboardingCompleted;
+      if (socialMedia !== undefined) updateData.socialMedia = socialMedia;
 
       console.log('🔵 updateProfile - updateData:', JSON.stringify(updateData, null, 2));
 

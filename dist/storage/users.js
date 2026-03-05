@@ -47,6 +47,12 @@ export class UserStorage {
                 data.city = userData.city;
             if ('isVerified' in userData)
                 data.isVerified = userData.isVerified ?? false;
+            if ('coverImageUrl' in userData)
+                data.coverImageUrl = userData.coverImageUrl;
+            if ('onboardingCompleted' in userData)
+                data.onboardingCompleted = userData.onboardingCompleted;
+            if ('socialMedia' in userData && userData.socialMedia !== undefined)
+                data.socialMedia = userData.socialMedia;
             return data;
         };
         if (existingUser) {

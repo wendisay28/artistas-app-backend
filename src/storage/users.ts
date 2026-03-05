@@ -33,10 +33,14 @@ export class UserStorage {
     lastName?: string;
     username?: string;
     profileImageUrl?: string | null;
+    coverImageUrl?: string | null;
     userType?: 'general' | 'artist' | 'company';
     bio?: string | null;
     city?: string | null;
     isVerified?: boolean;
+    onboardingCompleted?: boolean;
+    socialMedia?: Record<string, string | undefined>;
+    [key: string]: any;
   }): Promise<typeof users.$inferSelect> {
     const [existingUser] = await this.db
       .select()
@@ -60,6 +64,9 @@ export class UserStorage {
       if ('bio' in userData && userData.bio !== undefined) data.bio = userData.bio;
       if ('city' in userData && userData.city !== undefined) data.city = userData.city;
       if ('isVerified' in userData) data.isVerified = userData.isVerified ?? false;
+      if ('coverImageUrl' in userData) data.coverImageUrl = userData.coverImageUrl;
+      if ('onboardingCompleted' in userData) data.onboardingCompleted = userData.onboardingCompleted;
+      if ('socialMedia' in userData && userData.socialMedia !== undefined) data.socialMedia = userData.socialMedia;
 
       return data;
     };
