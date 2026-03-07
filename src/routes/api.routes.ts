@@ -94,6 +94,8 @@ import dislikedItemsRoutes from './dislikedItems.routes.js';
 import uploadRoutes from './upload.routes.js';
 import collectionsRoutes from './collections.routes.js';
 import blogRoutes from './blog.routes.js';
+import legalRoutes from './legal.routes.js';
+import stripeRoutes from './stripe.routes.js';
 import { venuesController } from '../controllers/venues.controller.js';
 import { storage } from '../storage/index.js';
 
@@ -371,6 +373,12 @@ v1.use('/upload', uploadRoutes);
 // Rutas de blog/posts (público + protegidas)
 v1.use('/blog', blogRoutes);
 v1.use('/posts', blogRoutes); // Alias para compatibilidad con post.service.ts
+
+// Rutas de legales (protegidas)
+v1.use('/legal', authMiddleware, legalRoutes);
+
+// Rutas de Stripe (protegidas)
+v1.use('/stripe', authMiddleware, stripeRoutes);
 
 // Nota: Las rutas de eventos están definidas en events.routes.ts
 // Las rutas duplicadas fueron removidas para evitar conflictos

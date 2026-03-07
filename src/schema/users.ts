@@ -45,8 +45,21 @@ export const users = pgTable('users', {
   schedule: varchar('schedule', { length: 255 }),
   interestedCategories: integer('interested_categories').array(),
   interestedTags: text('interested_tags').array(),
+  deliveryMode: varchar('delivery_mode', { length: 20 }), // presencial, digital, hibrido
 
+  // Campos de aceptación legal
+  termsAccepted: boolean('terms_accepted').default(false),
+  privacyAccepted: boolean('privacy_accepted').default(false),
+  ageVerified: boolean('age_verified').default(false),
   termsAcceptedAt: timestamp('terms_accepted_at'),
+
+  // Campos de Stripe
+  stripeStatus: varchar('stripe_status', { length: 20 }), // disconnected, pending, connected, restricted, error
+  stripeAccountId: varchar('stripe_account_id'), // ID de cuenta en Stripe
+  stripeHolderName: varchar('stripe_holder_name'), // Nombre del titular
+  stripeEmail: varchar('stripe_email'), // Email para Stripe
+  stripePhone: varchar('stripe_phone'), // Teléfono para Stripe
+  stripeAccountType: varchar('stripe_account_type', { length: 10 }), // individual, company
 
   createdAt: timestamp('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: timestamp('updated_at').default(sql`CURRENT_TIMESTAMP`),

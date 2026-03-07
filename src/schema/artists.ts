@@ -29,7 +29,6 @@ export const artists = pgTable('artists', {
   experience: integer('experience'), // Nivel de experiencia: 1=principiante, 2=intermedio, 3=profesional, 4=experto
   yearsOfExperience: integer('years_of_experience'),
   description: text('description'),
-  bio: text('bio'),
   socialMedia: jsonb('social_media').default({}), // 
 
   // Multimedia
