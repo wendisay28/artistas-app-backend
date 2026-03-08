@@ -63,6 +63,7 @@ export class UserStorage {
       if ('userType' in userData && userData.userType) data.userType = userData.userType;
       if ('bio' in userData && userData.bio !== undefined) data.bio = userData.bio;
       if ('city' in userData && userData.city !== undefined) data.city = userData.city;
+      if ('schedule' in userData && userData.schedule !== undefined) data.schedule = userData.schedule;
       if ('isVerified' in userData) data.isVerified = userData.isVerified ?? false;
       if ('coverImageUrl' in userData) data.coverImageUrl = userData.coverImageUrl;
       if ('onboardingCompleted' in userData) data.onboardingCompleted = userData.onboardingCompleted;

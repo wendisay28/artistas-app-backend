@@ -59,9 +59,12 @@ export const getAll = async (req: Request, res: Response) => {
         id: u.id,
         type: 'artist',
         name: displayName,
+        // bio: texto CORTO del header del perfil. Fuente: tabla `users.bio`. NO es "Acerca de mí".
         bio: u.bio ?? '',
+        // description/acercaDeMi: texto LARGO de la sección "Acerca de mí". Fuente: tabla `artists.description`.
+        description: (a as any)?.description ?? '',
         image: u.profileImageUrl ?? '',
-        gallery: [],                        // sin fotos públicas aún
+        gallery: [],
         location: u.city ?? 'Colombia',
         rating: u.rating ? parseFloat(String(u.rating)) : 4.5,
         reviews: (u as any).reviewsCount ?? 0,
@@ -69,7 +72,6 @@ export const getAll = async (req: Request, res: Response) => {
         verified: u.isVerified ?? false,
         tags: a?.tags ?? [],
         services: [],
-        // Devolver categoryId/disciplineId/roleId como los otros endpoints
         category: category?.name || '',
         categoryId: category?.code,
         disciplineId: discipline?.code,
@@ -80,7 +82,7 @@ export const getAll = async (req: Request, res: Response) => {
         style: metadata?.style || '',
         availability: metadata?.artistAvailability || 'Disponible',
         responseTime: metadata?.responseTime || 'No especificado',
-        // Campos de perfil completo
+        schedule: (u as any).schedule ?? '',
         workExperience: (a as any)?.workExperience ?? [],
         education: (a as any)?.education ?? [],
         socialMedia: (u as any)?.socialMedia ?? null,
@@ -118,8 +120,10 @@ export const getById = async (req: Request, res: Response) => {
     const artistDetail = artistDetails[0] || null;
     const response: ArtistWithDetails = {
       ...artistData,
-      // Exponer campos del perfil artista al nivel raíz para que el frontend los encuentre
+      // description/acercaDeMi: texto LARGO "Acerca de mí". Fuente: tabla `artists.description`.
       description: artistDetail?.description ?? null,
+      // bio: texto CORTO del header del perfil. Fuente: tabla `users.bio`. NO mezclar con description.
+      bio: artistData.bio ?? '',
       tags: artistDetail?.tags ?? [],
       yearsOfExperience: artistDetail?.yearsOfExperience ?? null,
       workExperience: artistDetail?.workExperience ?? [],
@@ -128,6 +132,7 @@ export const getById = async (req: Request, res: Response) => {
       isFeatured: artistData.isFeatured ?? false,
       rating: artistData.rating ? parseFloat(artistData.rating) : null,
       totalReviews: artistData.totalReviews ?? 0,
+      schedule: (artistData as any).schedule ?? '',
       details: artistDetail,
     };
 

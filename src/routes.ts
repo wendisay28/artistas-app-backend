@@ -3,6 +3,12 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage/index.js";
 import { artistsController } from "./controllers/artists.controller.js";
+import { 
+  getArtistAvailability,
+  createBooking,
+  updateBookingStatus,
+  getUserBookings
+} from "./controllers/availability.controller.js";
 import { auth } from "./config/firebase.js";
 import { 
   users,
@@ -201,6 +207,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/v1/explorer/artists/map', artistsController.getArtistsForMap);
   app.get('/v1/explorer/artists', artistsController.getArtistsByFilters);
   app.get('/v1/explorer/artists/:id', artistsController.getArtistById);
+
+  // Availability/Booking routes
+  app.get('/v1/artists/:id/availability', getArtistAvailability);
+  app.post('/v1/bookings', requireAuth, createBooking);
+  app.patch('/v1/bookings/:id', requireAuth, updateBookingStatus);
+  app.get('/v1/bookings', requireAuth, getUserBookings);
 
   // Users routes (basic CRUD for profile and userType)
   app.get('/api/users/:id', async (req: any, res) => {

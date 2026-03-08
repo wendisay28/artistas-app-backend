@@ -10,6 +10,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import type { Express } from 'express';
 import { sql } from 'drizzle-orm';
 import apiRoutes from './routes/api.routes.js';
+import { handleWebhook } from './controllers/stripe.controller.js';
 import csrfRoutes from './routes/csrfRoutes.js';
 import { db, dbReady } from './db.js';
 import { storage } from './storage/index.js';
@@ -244,6 +245,9 @@ export { userConnections };
 // Configuración de middleware
 app.use(helmet());
 app.use(compression() as unknown as RequestHandler);
+
+// ── Webhook de Stripe (raw body ANTES de express.json) ──────────────────────
+app.post('/api/webhooks/stripe', express.raw({ type: 'application/json' }), handleWebhook);
 
 // Middleware para parsear JSON y URL-encoded
 app.use(express.json({ limit: '50mb' }));
