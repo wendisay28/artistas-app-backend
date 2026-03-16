@@ -1,11 +1,7 @@
 -- Migration: Portfolio Featured Logic
--- Description: Crea tablas gallery y featured_items si no existen,
---              agrega is_featured a featured_items y profile_complete a users.
 -- Date: 2026-03-16
 
--- ============================================================================
--- 1. CREAR TABLA gallery (fotos del portafolio)
--- ============================================================================
+-- 1. Crear tabla gallery si no existe
 CREATE TABLE IF NOT EXISTS gallery (
   id              SERIAL PRIMARY KEY,
   user_id         VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -21,9 +17,7 @@ CREATE TABLE IF NOT EXISTS gallery (
   updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================================
--- 2. CREAR TABLA featured_items (videos/enlaces del portafolio)
--- ============================================================================
+-- 2. Crear tabla featured_items si no existe
 CREATE TABLE IF NOT EXISTS featured_items (
   id            SERIAL PRIMARY KEY,
   user_id       VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -37,20 +31,7 @@ CREATE TABLE IF NOT EXISTS featured_items (
   updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================================
--- 3. AGREGAR COLUMNAS FALTANTES (si las tablas ya existían sin ellas)
--- ============================================================================
+-- 3. Agregar columnas faltantes (seguro si ya existen)
 ALTER TABLE featured_items ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
-
-ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_complete BOOLEAN DEFAULT false;
-
--- ============================================================================
--- 4. ÍNDICE OPCIONAL (optimiza búsqueda de video destacado por usuario)
--- ============================================================================
-CREATE INDEX IF NOT EXISTS idx_featured_items_user_featured
-  ON featured_items (user_id)
-  WHERE is_featured = true;
-
-CREATE INDEX IF NOT EXISTS idx_gallery_user_featured
-  ON gallery (user_id)
-  WHERE is_featured = true;
+ALTER TABLE gallery        ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT false;
+ALTER TABLE users          ADD COLUMN IF NOT EXISTS profile_complete BOOLEAN DEFAULT false;
