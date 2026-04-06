@@ -1,15 +1,13 @@
 import { Request, Response } from 'express';
 import { db } from '../db.js';
-import { users, artists, categories, disciplines, roles } from '../schema.js';
-import { eq, and, sql, isNull } from 'drizzle-orm';
-import { format } from 'date-fns';
+import { users, categories, disciplines, roles } from '../schema.js';
+import { eq, and, sql } from 'drizzle-orm';
 
 // Tipo local flexible para respuesta enriquecida del artista
 interface ArtistWithDetails extends Record<string, any> {
   isFeatured: boolean;
   rating: number | null;
   totalReviews: number;
-  details: any | null;
 }
 
 // Obtener artistas destacados
@@ -31,46 +29,42 @@ export const getFeatured = async (req: Request, res: Response) => {
 // Obtener todos los artistas (formato para el explorador del frontend)
 export const getAll = async (req: Request, res: Response) => {
   try {
-    // Traer usuarios artistas junto con su perfil de artista y categorías
     const rows = await db
       .select({
         user: users,
-        artist: artists,
         category: categories,
         discipline: disciplines,
         role: roles,
       })
       .from(users)
-      .leftJoin(artists, eq(artists.userId, users.id))
-      .leftJoin(categories, eq(artists.categoryId, categories.id))
-      .leftJoin(disciplines, eq(artists.disciplineId, disciplines.id))
-      .leftJoin(roles, eq(artists.roleId, roles.id))
+      .leftJoin(categories, eq(users.categoryId, categories.id))
+      .leftJoin(disciplines, eq(users.disciplineId, disciplines.id))
+      .leftJoin(roles, eq(users.roleId, roles.id))
       .where(eq(users.userType, 'artist'))
       .orderBy(users.firstName, users.lastName);
 
-    // Mapear al formato que espera el explorador del frontend
-    const mapped = rows.map(({ user: u, artist: a, category, discipline, role }) => {
+    const mapped = rows.map(({ user: u, category, discipline, role }) => {
       const nameParts = `${u.firstName || ''} ${u.lastName || ''}`.trim();
       const displayName = u.displayName || nameParts || (u.email?.split('@')[0]) || 'Artista';
 
-      const metadata = (a as any)?.metadata as Record<string, any> | undefined;
+      const metadata = (u.artistMetadata as Record<string, any> | undefined);
 
       return {
         id: u.id,
         type: 'artist',
         name: displayName,
-        // bio: texto CORTO del header del perfil. Fuente: tabla `users.bio`. NO es "Acerca de mí".
+        // bio: texto CORTO del header del perfil. Fuente: users.bio. NO es "Acerca de mí".
         bio: u.bio ?? '',
-        // description/acercaDeMi: texto LARGO de la sección "Acerca de mí". Fuente: tabla `artists.description`.
-        description: (a as any)?.description ?? '',
+        // description: texto LARGO de la sección "Acerca de mí". Fuente: users.description.
+        description: u.description ?? '',
         image: u.profileImageUrl ?? '',
-        gallery: [],
+        gallery: Array.isArray(u.gallery) ? u.gallery : [],
         location: u.city ?? 'Colombia',
         rating: u.rating ? parseFloat(String(u.rating)) : 4.5,
-        reviews: (u as any).reviewsCount ?? 0,
-        price: a?.pricePerHour ? parseFloat(String(a.pricePerHour)) : 0,
+        reviews: u.totalReviews ?? 0,
+        price: u.pricePerHour ? parseFloat(String(u.pricePerHour)) : 0,
         verified: u.isVerified ?? false,
-        tags: a?.tags ?? [],
+        tags: u.tags ?? [],
         services: [],
         category: category?.name || '',
         categoryId: category?.code,
@@ -78,14 +72,14 @@ export const getAll = async (req: Request, res: Response) => {
         roleId: role?.code,
         specialty: metadata?.specialty,
         niche: metadata?.niche,
-        experience: metadata?.yearsExperience || (a?.yearsOfExperience ? `${a.yearsOfExperience} años` : 'No especificado'),
+        experience: metadata?.yearsExperience || (u.yearsOfExperience ? `${u.yearsOfExperience} años` : 'No especificado'),
         style: metadata?.style || '',
-        availability: metadata?.artistAvailability || 'Disponible',
+        availability: u.availability || 'Disponible',
         responseTime: metadata?.responseTime || 'No especificado',
-        schedule: (u as any).schedule ?? '',
-        workExperience: (a as any)?.workExperience ?? [],
-        education: (a as any)?.education ?? [],
-        socialMedia: (u as any)?.socialMedia ?? null,
+        schedule: u.schedule ?? '',
+        workExperience: u.workExperience ?? [],
+        education: u.education ?? [],
+        socialMedia: u.socialMedia ?? null,
       };
     });
 
@@ -100,40 +94,21 @@ export const getAll = async (req: Request, res: Response) => {
 export const getById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
-    const artist = await db
+
+    const [artistUser] = await db
       .select()
       .from(users)
       .where(and(eq(users.id, id), eq(users.userType, 'artist')));
 
-    if (artist.length === 0) {
+    if (!artistUser) {
       return res.status(404).json({ message: 'Artista no encontrado' });
     }
 
-    // Obtener detalles adicionales del artista
-    const artistDetails = await db
-      .select()
-      .from(artists)
-      .where(eq(artists.userId, id));
-
-    const artistData = artist[0];
-    const artistDetail = artistDetails[0] || null;
     const response: ArtistWithDetails = {
-      ...artistData,
-      // description/acercaDeMi: texto LARGO "Acerca de mí". Fuente: tabla `artists.description`.
-      description: artistDetail?.description ?? null,
-      // bio: texto CORTO del header del perfil. Fuente: tabla `users.bio`. NO mezclar con description.
-      bio: artistData.bio ?? '',
-      tags: artistDetail?.tags ?? [],
-      yearsOfExperience: artistDetail?.yearsOfExperience ?? null,
-      workExperience: artistDetail?.workExperience ?? [],
-      education: artistDetail?.education ?? [],
-      artistName: artistDetail?.artistName ?? null,
-      isFeatured: artistData.isFeatured ?? false,
-      rating: artistData.rating ? parseFloat(artistData.rating) : null,
-      totalReviews: artistData.totalReviews ?? 0,
-      schedule: (artistData as any).schedule ?? '',
-      details: artistDetail,
+      ...artistUser,
+      isFeatured: artistUser.isFeatured ?? false,
+      rating: artistUser.rating ? parseFloat(String(artistUser.rating)) : null,
+      totalReviews: artistUser.totalReviews ?? 0,
     };
 
     res.json(response);
@@ -172,7 +147,7 @@ export const artistController = {
         .from(users)
         .where(eq(users.userType, 'artist'))
         .orderBy(sql`${users.rating} DESC`);
-      
+
       res.json(allArtists);
     } catch (error) {
       console.error('Error fetching artists:', error);

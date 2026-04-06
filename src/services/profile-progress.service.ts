@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { users, artists } from '../schema.js';
+import { users } from '../schema.js';
 import { eq } from 'drizzle-orm';
 
 export interface ProfileCompleteness {
@@ -31,12 +31,8 @@ export class ProfileProgressService {
       const userData = user[0];
       const isArtist = userData.userType === 'artist';
 
-      // Obtener datos de artista si aplica
-      let artistData: any = null;
-      if (isArtist) {
-        const artist = await db.select().from(artists).where(eq(artists.userId, userId)).limit(1);
-        artistData = artist.length > 0 ? artist[0] : null;
-      }
+      // Los datos de artista están ahora directamente en users
+      const artistData: any = isArtist ? userData : null;
 
       // Secciones del perfil
       const sections = {

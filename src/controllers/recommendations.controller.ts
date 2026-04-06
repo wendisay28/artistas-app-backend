@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../db.js';
-import { recommendations, users, artists, events, venues, blogPosts } from '../schema.js';
+import { recommendations, users, events, venues, blogPosts } from '../schema.js';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { recommendationsService } from '../services/recommendations.service.js';
 import { z } from 'zod';

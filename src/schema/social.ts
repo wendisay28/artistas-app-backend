@@ -1,14 +1,13 @@
 import { pgTable, serial, varchar, text, timestamp, boolean, integer, numeric, jsonb } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users.js';
-import { artists } from './artists.js';
 import { events } from './events.js';
 import { venues } from './companies.js';
 
 export const reviews = pgTable('reviews', {
   id: serial('id').primaryKey(),
   userId: varchar('user_id').notNull().references(() => users.id),
-  artistId: integer('artist_id').references(() => artists.id),
+  artistId: integer('artist_id'), // FK to artists.id removed (artists table merged into users)
   eventId: integer('event_id').references(() => events.id),
   venueId: integer('venue_id').references(() => venues.id),
   type: varchar('type', { enum: ['artist', 'event', 'venue'] }).notNull(),

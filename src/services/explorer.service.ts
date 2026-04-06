@@ -1,6 +1,6 @@
 import { db } from '../db.js';
 import { and, eq, gte, lte, or, sql, desc, inArray, ilike, isNull } from 'drizzle-orm';
-import { users, artists, events, venues, services, artworks, categories, disciplines, roles, highlightPhotos } from '../schema/index.js';
+import { users, events, venues, services, artworks, categories, disciplines, roles, highlightPhotos } from '../schema/index.js';
 
 // DTOs para tipado seguro
 export interface ExplorerFilters {
@@ -65,31 +65,31 @@ class ExplorerService {
     if (filters.category) {
       const categoryId = parseInt(filters.category);
       if (!isNaN(categoryId)) {
-        conditions.push(eq(artists.categoryId, categoryId));
+        conditions.push(eq(users.categoryId, categoryId));
       }
     }
 
     if (filters.discipline) {
       conditions.push(
         or(
-          sql`LOWER(${artists.artistType}::text) LIKE LOWER(${`%${filters.discipline}%`}::text)`,
-          sql`${artists.tags}::text ILIKE ${`%${filters.discipline}%`}`
+          sql`LOWER(${users.artistType}::text) LIKE LOWER(${`%${filters.discipline}%`}::text)`,
+          sql`${users.tags}::text ILIKE ${`%${filters.discipline}%`}`
         )
       );
     }
 
     if (filters.role) {
       conditions.push(
-        sql`LOWER(${artists.artistType}::text) LIKE LOWER(${`%${filters.role}%`}::text)`
+        sql`LOWER(${users.artistType}::text) LIKE LOWER(${`%${filters.role}%`}::text)`
       );
     }
 
     if (filters.maxPrice) {
-      conditions.push(lte(artists.pricePerHour, filters.maxPrice.toString()));
+      conditions.push(lte(users.pricePerHour, filters.maxPrice.toString()));
     }
 
     if (filters.minPrice) {
-      conditions.push(gte(artists.pricePerHour, filters.minPrice.toString()));
+      conditions.push(gte(users.pricePerHour, filters.minPrice.toString()));
     }
 
     if (filters.query) {
@@ -132,37 +132,34 @@ class ExplorerService {
         isAvailable: users.isAvailable,
         website: users.website,
         socialMedia: users.socialMedia,
-        artistData: {
-          id: artists.id,
-          artistName: artists.artistName,
-          stageName: artists.stageName,
-          categoryId: artists.categoryId,
-          disciplineId: artists.disciplineId,
-          roleId: artists.roleId,
-          tags: artists.tags,
-          pricePerHour: artists.pricePerHour,
-          baseCity: artists.baseCity,
-          yearsOfExperience: artists.yearsOfExperience,
-          artistType: artists.artistType,
-          presentationType: artists.presentationType,
-          serviceTypes: artists.serviceTypes,
-          travelAvailability: artists.travelAvailability,
-          travelDistance: artists.travelDistance,
-          hourlyRate: artists.hourlyRate,
-          pricingType: artists.pricingType,
-          priceRange: artists.priceRange,
-          availability: artists.availability,
-          languages: artists.languages,
-          licenses: artists.licenses,
-          certifications: artists.certifications,
-          education: artists.education,
-          workExperience: artists.workExperience,
-          linkedAccounts: artists.linkedAccounts,
-          description: artists.description,
-          portfolio: artists.portfolio,
-          gallery: artists.gallery,
-          videoPresentation: artists.videoPresentation,
-        },
+        artistName: users.artistName,
+        stageName: users.stageName,
+        categoryId: users.categoryId,
+        disciplineId: users.disciplineId,
+        roleId: users.roleId,
+        tags: users.tags,
+        pricePerHour: users.pricePerHour,
+        baseCity: users.baseCity,
+        yearsOfExperience: users.yearsOfExperience,
+        artistType: users.artistType,
+        presentationType: users.presentationType,
+        serviceTypes: users.serviceTypes,
+        travelAvailability: users.travelAvailability,
+        travelDistance: users.travelDistance,
+        hourlyRate: users.hourlyRate,
+        pricingType: users.pricingType,
+        priceRange: users.priceRange,
+        availability: users.availability,
+        languages: users.languages,
+        licenses: users.licenses,
+        certifications: users.certifications,
+        education: users.education,
+        workExperience: users.workExperience,
+        linkedAccounts: users.linkedAccounts,
+        description: users.description,
+        portfolio: users.portfolio,
+        gallery: users.gallery,
+        videoPresentation: users.videoPresentation,
         categoryName: categories.name,
         disciplineName: disciplines.name,
         roleName: roles.name,
@@ -199,13 +196,12 @@ class ExplorerService {
         )`.as('servicesData'),
       })
       .from(users)
-      .leftJoin(artists, eq(users.id, artists.userId))
-      .leftJoin(categories, eq(artists.categoryId, categories.id))
-      .leftJoin(disciplines, eq(artists.disciplineId, disciplines.id))
-      .leftJoin(roles, eq(artists.roleId, roles.id))
+      .leftJoin(categories, eq(users.categoryId, categories.id))
+      .leftJoin(disciplines, eq(users.disciplineId, disciplines.id))
+      .leftJoin(roles, eq(users.roleId, roles.id))
       .where(whereCondition)
       .orderBy(
-        filters.sortBy === 'price' ? artists.pricePerHour :
+        filters.sortBy === 'price' ? users.pricePerHour :
         filters.sortBy === 'newest' ? desc(users.createdAt) :
         desc(users.rating)
       )
@@ -216,7 +212,6 @@ class ExplorerService {
     const countQuery = db
       .select({ count: sql<number>`count(*)` })
       .from(users)
-      .leftJoin(artists, eq(users.id, artists.userId))
       .where(whereCondition);
 
     // Ejecutar queries en paralelo

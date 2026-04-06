@@ -1,33 +1,36 @@
 import { Request, Response } from "express";
 import { db } from "../db.js";
-import { eq, and, gte, lte, inArray, lt, gt } from "drizzle-orm";
-import { 
-  availabilityRules, 
-  blockedDates, 
-  artistBookings, 
-  artists 
+import { eq, and, gte, lte, lt, gt } from "drizzle-orm";
+import {
+  availabilityRules,
+  blockedDates,
+  artistBookings,
+  users
 } from "../schema.js";
 
 // Obtener disponibilidad de un artista para un mes específico
 export const getArtistAvailability = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params; // userId (varchar)
     const { month } = req.query; // Formato: YYYY-MM
 
     if (!month || typeof month !== 'string') {
-      return res.status(400).json({ 
-        error: "Se requiere el parámetro 'month' en formato YYYY-MM" 
+      return res.status(400).json({
+        error: "Se requiere el parámetro 'month' en formato YYYY-MM"
       });
     }
 
-    // Parsear el mes para obtener el rango de fechas
     const [year, monthNum] = month.split('-').map(Number);
     const startDate = new Date(year, monthNum - 1, 1);
     const endDate = new Date(year, monthNum, 0); // Último día del mes
 
     // Verificar que el artista existe
-    const artist = await db.select().from(artists).where(eq(artists.id, parseInt(id))).limit(1);
-    if (artist.length === 0) {
+    const [artist] = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.id, id), eq(users.userType, 'artist')))
+      .limit(1);
+    if (!artist) {
       return res.status(404).json({ error: "Artista no encontrado" });
     }
 
@@ -36,7 +39,7 @@ export const getArtistAvailability = async (req: Request, res: Response) => {
       .select()
       .from(availabilityRules)
       .where(and(
-        eq(availabilityRules.artistId, parseInt(id)),
+        eq(availabilityRules.artistId, id),
         eq(availabilityRules.isActive, true)
       ));
 
@@ -45,7 +48,7 @@ export const getArtistAvailability = async (req: Request, res: Response) => {
       .select()
       .from(blockedDates)
       .where(and(
-        eq(blockedDates.artistId, parseInt(id)),
+        eq(blockedDates.artistId, id),
         gte(blockedDates.date, startDate.toISOString().split('T')[0]),
         lte(blockedDates.date, endDate.toISOString().split('T')[0])
       ));
@@ -55,7 +58,7 @@ export const getArtistAvailability = async (req: Request, res: Response) => {
       .select()
       .from(artistBookings)
       .where(and(
-        eq(artistBookings.artistId, parseInt(id)),
+        eq(artistBookings.artistId, id),
         eq(artistBookings.status, 'accepted'),
         gte(artistBookings.eventDate, startDate.toISOString().split('T')[0]),
         lte(artistBookings.eventDate, endDate.toISOString().split('T')[0])
@@ -67,37 +70,27 @@ export const getArtistAvailability = async (req: Request, res: Response) => {
     for (let day = 1; day <= endDate.getDate(); day++) {
       const currentDate = new Date(year, monthNum - 1, day);
       const dateStr = currentDate.toISOString().split('T')[0];
-      const dayOfWeek = currentDate.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+      const dayOfWeek = currentDate.getDay();
 
-      // Verificar si está bloqueado
-      const isBlocked = blockedDatesList.some(blocked => 
-        blocked.date === dateStr
-      );
-
+      const isBlocked = blockedDatesList.some(blocked => blocked.date === dateStr);
       if (isBlocked) {
         availability[dateStr] = [];
         continue;
       }
 
-      // Encontrar regla para este día de la semana
       const dayRule = rules.find(rule => rule.dayOfWeek === dayOfWeek);
-      
       if (!dayRule) {
         availability[dateStr] = [];
         continue;
       }
 
-      // Generar slots de tiempo
       const slots = generateTimeSlots(
         new Date(`2000-01-01T${dayRule.startTime}`),
         new Date(`2000-01-01T${dayRule.endTime}`),
         dayRule.slotDurationMinutes || 60
       );
 
-      // Filtrar slots ocupados por reservas aceptadas
-      const dayBookings = acceptedBookings.filter(booking => 
-        booking.eventDate === dateStr
-      );
+      const dayBookings = acceptedBookings.filter(booking => booking.eventDate === dateStr);
 
       const availableSlots = slots.filter(slot => {
         return !dayBookings.some(booking => {
@@ -137,32 +130,34 @@ export const getArtistAvailability = async (req: Request, res: Response) => {
 export const createBooking = async (req: Request, res: Response) => {
   try {
     const { artistId, date, startTime, endTime, title, description, clientNotes, locationType, location, price } = req.body;
-    const userId = req.user?.uid; // ID del cliente autenticado
+    const userId = req.user?.uid;
 
     if (!userId) {
       return res.status(401).json({ error: "No autorizado" });
     }
 
-    // Validaciones básicas
     if (!artistId || !date || !startTime || !endTime || !title) {
-      return res.status(400).json({ 
-        error: "Faltan campos requeridos: artistId, date, startTime, endTime, title" 
+      return res.status(400).json({
+        error: "Faltan campos requeridos: artistId, date, startTime, endTime, title"
       });
     }
 
-    // Verificar que el artista existe
-    const artist = await db.select().from(artists).where(eq(artists.id, parseInt(artistId))).limit(1);
-    if (artist.length === 0) {
+    // Verificar que el artista existe (artistId is now users.id varchar)
+    const [artist] = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.id, String(artistId)), eq(users.userType, 'artist')))
+      .limit(1);
+    if (!artist) {
       return res.status(404).json({ error: "Artista no encontrado" });
     }
 
-    // Verificar conflictos de horario usando Drizzle
     const conflictBookings = await db
       .select()
       .from(artistBookings)
       .where(
         and(
-          eq(artistBookings.artistId, parseInt(artistId)),
+          eq(artistBookings.artistId, String(artistId)),
           eq(artistBookings.eventDate, date),
           eq(artistBookings.status, 'accepted'),
           lt(artistBookings.startTime, endTime),
@@ -174,9 +169,8 @@ export const createBooking = async (req: Request, res: Response) => {
       return res.status(409).json({ error: "El horario solicitado ya está ocupado" });
     }
 
-    // Crear la reserva
     const newBooking = await db.insert(artistBookings).values({
-      artistId: parseInt(artistId),
+      artistId: String(artistId),
       clientId: userId,
       title,
       description,
@@ -188,7 +182,7 @@ export const createBooking = async (req: Request, res: Response) => {
       location,
       price: price ? price : null,
       status: 'pending',
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // Expira en 24 horas
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
     }).returning();
 
     res.status(201).json({
@@ -214,59 +208,40 @@ export const updateBookingStatus = async (req: Request, res: Response) => {
     }
 
     if (!status || !['accepted', 'rejected', 'cancelled', 'completed'].includes(status)) {
-      return res.status(400).json({ 
-        error: "Estado inválido. Estados válidos: accepted, rejected, cancelled, completed" 
+      return res.status(400).json({
+        error: "Estado inválido. Estados válidos: accepted, rejected, cancelled, completed"
       });
     }
 
-    // Verificar que la reserva existe y obtener el artista
-    const bookingWithArtist = await db
-      .select({
-        booking: artistBookings,
-        artistUserId: artists.userId
-      })
+    const [booking] = await db
+      .select()
       .from(artistBookings)
-      .leftJoin(artists, eq(artistBookings.artistId, artists.id))
       .where(eq(artistBookings.id, id))
       .limit(1);
-    
-    if (bookingWithArtist.length === 0) {
+
+    if (!booking) {
       return res.status(404).json({ error: "Reserva no encontrada" });
     }
 
-    const { booking, artistUserId } = bookingWithArtist[0];
+    // artistId IS the userId now
+    const artistUserId = booking.artistId;
 
-    // Verificar permisos: solo el artista puede cambiar estado a accepted/rejected/completed
     if (['accepted', 'rejected', 'completed'].includes(status) && artistUserId !== userId) {
       return res.status(403).json({ error: "No tienes permisos para actualizar esta reserva" });
     }
 
-    // Verificar permisos: solo el cliente puede cancelar
     if (status === 'cancelled' && booking.clientId !== userId && artistUserId !== userId) {
       return res.status(403).json({ error: "No tienes permisos para cancelar esta reserva" });
     }
 
-    // Actualizar la reserva
     const updateData: any = { status };
-    
-    if (artistNotes) {
-      updateData.artistNotes = artistNotes;
-    }
+    if (artistNotes) updateData.artistNotes = artistNotes;
 
-    // Agregar timestamps según el estado
     switch (status) {
-      case 'accepted':
-        updateData.acceptedAt = new Date();
-        break;
-      case 'rejected':
-        updateData.rejectedAt = new Date();
-        break;
-      case 'cancelled':
-        updateData.cancelledAt = new Date();
-        break;
-      case 'completed':
-        updateData.completedAt = new Date();
-        break;
+      case 'accepted': updateData.acceptedAt = new Date(); break;
+      case 'rejected': updateData.rejectedAt = new Date(); break;
+      case 'cancelled': updateData.cancelledAt = new Date(); break;
+      case 'completed': updateData.completedAt = new Date(); break;
     }
 
     const updatedBooking = await db
@@ -290,54 +265,30 @@ export const updateBookingStatus = async (req: Request, res: Response) => {
 export const getUserBookings = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.uid;
-    const { status, role } = req.query; // role: 'client' o 'artist'
+    const { status, role } = req.query;
 
     if (!userId) {
       return res.status(401).json({ error: "No autorizado" });
     }
 
-    // Construir la consulta base
-    let baseQuery = db
-      .select({
-        booking: artistBookings,
-        artist: {
-          id: artists.id,
-          userId: artists.userId,
-          name: artists.artistName
-        }
-      })
-      .from(artistBookings)
-      .leftJoin(artists, eq(artistBookings.artistId, artists.id)) as any;
+    let query = db.select().from(artistBookings) as any;
 
-    // Aplicar filtros según el rol
     if (role === 'artist') {
-      // El usuario es un artista, ver sus reservas
-      const artistRecord = await db.select().from(artists).where(eq(artists.userId, userId)).limit(1);
-      if (artistRecord.length === 0) {
-        return res.status(404).json({ error: "No se encontró perfil de artista" });
-      }
-      baseQuery = baseQuery.where(eq(artistBookings.artistId, artistRecord[0].id));
+      // artistBookings.artistId IS the userId
+      query = query.where(eq(artistBookings.artistId, userId));
     } else {
-      // El usuario es un cliente, ver sus reservas
-      baseQuery = baseQuery.where(eq(artistBookings.clientId, userId));
+      query = query.where(eq(artistBookings.clientId, userId));
     }
 
-    // Filtrar por estado si se proporciona
     if (status && typeof status === 'string') {
-      baseQuery = baseQuery.where(eq(artistBookings.status, status as any));
+      query = query.where(eq(artistBookings.status, status as any));
     }
 
-    // Ordenar por fecha
-    baseQuery = baseQuery.orderBy(artistBookings.eventDate);
+    query = query.orderBy(artistBookings.eventDate);
 
-    const bookings = await baseQuery;
+    const bookings = await query;
 
-    res.json({
-      bookings: bookings.map((item: any) => ({
-        ...item.booking,
-        artist: item.artist
-      }))
-    });
+    res.json({ bookings });
 
   } catch (error) {
     console.error("Error al obtener reservas:", error);
@@ -350,13 +301,12 @@ function generateTimeSlots(startTime: Date, endTime: Date, durationMinutes: numb
   const slots: string[] = [];
   const start = new Date(startTime);
   const end = new Date(endTime);
-  
   const current = new Date(start);
-  
+
   while (current.getTime() + durationMinutes * 60 * 1000 <= end.getTime()) {
     slots.push(current.toTimeString().slice(0, 5));
     current.setTime(current.getTime() + durationMinutes * 60 * 1000);
   }
-  
+
   return slots;
 }

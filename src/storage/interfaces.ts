@@ -1,6 +1,7 @@
 import { db } from '../db.js';
-import { events, users, categories, venues, artists, messages, recommendations, blogPosts } from '../schema.js';
+import { events, users, categories, venues, messages, recommendations, blogPosts } from '../schema.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { ArtistWithRelations } from './artists.js';
 
 export interface IStorage {
   // Category methods
@@ -12,11 +13,11 @@ export interface IStorage {
   getUsers(filters: { userType?: 'general' | 'artist' | 'company' }): Promise<typeof users.$inferSelect[]>;
   getVenue(id: number): Promise<(typeof venues.$inferSelect & { owner: typeof users.$inferSelect }) | undefined>;
   getVenues(filters: { ownerId?: string }): Promise<(typeof venues.$inferSelect & { owner: typeof users.$inferSelect })[]>;
-  getArtist(id: number): Promise<(typeof artists.$inferSelect & { user: typeof users.$inferSelect; category?: typeof categories.$inferSelect }) | undefined>;
-  getArtists(filters: { categoryId?: number; userId?: string }): Promise<(typeof artists.$inferSelect & { user: typeof users.$inferSelect; category?: typeof categories.$inferSelect })[]>;
-  createArtist(artist: Omit<typeof artists.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof artists.$inferSelect>;
-  updateArtist(id: number, artist: Partial<typeof artists.$inferInsert>): Promise<typeof artists.$inferSelect>;
-  deleteArtist(id: number): Promise<void>;
+  getArtist(userId: string): Promise<ArtistWithRelations | undefined>;
+  getArtists(filters: { categoryId?: number; userId?: string }): Promise<ArtistWithRelations[]>;
+  createArtist(artist: { userId: string; artistName: string; categoryId?: number | null; bio?: string | null }): Promise<typeof users.$inferSelect>;
+  updateArtist(userId: string, artist: Partial<typeof users.$inferInsert>): Promise<typeof users.$inferSelect>;
+  deleteArtist(userId: string): Promise<void>;
   getMessage(id: number): Promise<(typeof messages.$inferSelect & { sender: typeof users.$inferSelect; receiver: typeof users.$inferSelect }) | undefined>;
   getMessages(filters: { senderId?: string; receiverId?: string }): Promise<(typeof messages.$inferSelect & { sender: typeof users.$inferSelect; receiver: typeof users.$inferSelect })[]>;
   getUserMessages(userId: string): Promise<(typeof messages.$inferSelect & { sender: typeof users.$inferSelect; receiver: typeof users.$inferSelect })[]>;
@@ -26,16 +27,16 @@ export interface IStorage {
   createRecommendation(recommendation: Omit<typeof recommendations.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof recommendations.$inferSelect>;
   getBlogPost(id: number): Promise<(typeof blogPosts.$inferSelect & { author: typeof users.$inferSelect }) | undefined>;
   getBlogPosts(filters: { authorId?: string, category?: string, visibility?: 'draft' | 'public' | 'private', search?: string }): Promise<(typeof blogPosts.$inferSelect & { author: typeof users.$inferSelect })[]>;
-  
+
   // Mutation methods
   createEvent(event: Omit<typeof events.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof events.$inferSelect>;
   updateEvent(id: number, event: Partial<typeof events.$inferInsert>): Promise<typeof events.$inferSelect>;
   deleteEvent(id: number): Promise<void>;
-  
+
   createVenue(venue: Omit<typeof venues.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof venues.$inferSelect>;
   updateVenue(id: number, venue: Partial<typeof venues.$inferInsert>): Promise<typeof venues.$inferSelect>;
   deleteVenue(id: number): Promise<void>;
-  
+
   createBlogPost(post: Omit<typeof blogPosts.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof blogPosts.$inferSelect>;
   updateBlogPost(id: number, post: Partial<typeof blogPosts.$inferInsert>): Promise<typeof blogPosts.$inferSelect>;
   deleteBlogPost(id: number): Promise<void>;

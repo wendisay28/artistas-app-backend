@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { storage } from '../storage/index.js';
 import { eq, and, desc, gte, lte } from 'drizzle-orm';
-import { bookings, userContracts, artists } from '../schema.js';
+import { bookings, userContracts } from '../schema.js';
 
 export const bookingsController = {
   // Obtener todas las reservas de una empresa
@@ -236,19 +236,8 @@ export const bookingsController = {
 
       const bookingData = booking[0];
 
-      // Obtener el userId del artista si la reserva tiene artistId
-      let artistUserId: string | null = null;
-      if (bookingData.artistId) {
-        const artistRecord = await storage.db
-          .select()
-          .from(artists)
-          .where(eq(artists.id, bookingData.artistId))
-          .limit(1);
-
-        if (artistRecord && artistRecord.length > 0) {
-          artistUserId = artistRecord[0].userId;
-        }
-      }
+      // artistId IS the userId now (artists merged into users)
+      const artistUserId: string | null = bookingData.artistId ?? null;
 
       // Verificar que el usuario sea el artista asociado a la reserva
       const isArtist = artistUserId && artistUserId === userId;

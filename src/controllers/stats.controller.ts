@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { db } from '../db.js';
 import { sql, eq, and, gte } from 'drizzle-orm';
-import { users, userActivities, userContracts, events, artists } from '../schema.js';
+import { users, userActivities, userContracts, events } from '../schema.js';
 
 export const statsController = {
   async getUserStats(req: any, res: Response) {
@@ -102,11 +102,11 @@ export const statsController = {
         try {
           const [stats] = await db
             .select({
-              averageRating: sql<number>`COALESCE(AVG(${artists.rating}), 0)::numeric(10,2)`,
-              totalRatings: sql<number>`COALESCE(SUM(${artists.totalReviews}), 0)`,
+              averageRating: sql<number>`COALESCE(${users.rating}, 0)::numeric(10,2)`,
+              totalRatings: sql<number>`COALESCE(${users.totalReviews}, 0)`,
             })
-            .from(artists)
-            .where(eq(artists.userId, userId));
+            .from(users)
+            .where(eq(users.id, userId));
 
           if (stats) {
             ratingStats = {

@@ -536,7 +536,7 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
     // Si no hay registro de artista, continuar — el bloque "Crear si no existe" lo maneja
 
     // Normalizar payload parcial permitido
-    const artistPayload: Partial<typeof import('../schema.js').artists.$inferInsert> = {
+    const artistPayload: Record<string, any> = {
       artistName,
       stageName,
       categoryId: safeCategoryId,
@@ -571,9 +571,9 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       hourlyRate: typeof hourlyRate === 'number' ? hourlyRate.toString() : undefined,
       pricingType: pricingType ? pricingType : undefined,
       priceRange: priceRange && typeof priceRange === 'object' ? priceRange : undefined,
-      // Texto libre: guardar en metadata junto con lo que ya haya
-      metadata: (specialty || niche || style || artistAvailability || responseTime) ? {
-        ...(existing?.artist?.metadata as object || {}),
+      // Texto libre: guardar en artistMetadata junto con lo que ya haya
+      artistMetadata: (specialty || niche || style || artistAvailability || responseTime) ? {
+        ...(existing?.artist?.artistMetadata as object || {}),
         ...(typeof specialty === 'string' && specialty ? { specialty } : {}),
         ...(typeof niche === 'string' && niche ? { niche } : {}),
         ...(typeof style === 'string' && style ? { style } : {}),
@@ -587,9 +587,9 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
       categoryId: artistPayload.categoryId,
       disciplineId: artistPayload.disciplineId,
       roleId: artistPayload.roleId,
-      specialty: (artistPayload.metadata && typeof artistPayload.metadata === 'object') ? (artistPayload.metadata as any).specialty || '' : '',
-      niche: (artistPayload.metadata && typeof artistPayload.metadata === 'object') ? (artistPayload.metadata as any).niche || '' : '',
-      metadata: artistPayload.metadata,
+      specialty: (artistPayload.artistMetadata && typeof artistPayload.artistMetadata === 'object') ? (artistPayload.artistMetadata as any).specialty || '' : '',
+      niche: (artistPayload.artistMetadata && typeof artistPayload.artistMetadata === 'object') ? (artistPayload.artistMetadata as any).niche || '' : '',
+      artistMetadata: artistPayload.artistMetadata,
     }, null, 2));
 
     // Crear si no existe
@@ -627,11 +627,6 @@ protectedRoutes.put('/artist/me', (async (req: any, res: Response) => {
     const cleanPayload = Object.fromEntries(
       Object.entries(artistPayload).filter(([_, v]) => v !== undefined)
     );
-
-    // Si se está actualizando description, también actualizar bio para consistencia
-    if (cleanPayload.description) {
-      cleanPayload.bio = cleanPayload.description;
-    }
 
     console.log('🧹 cleanPayload después de filtrar undefined:', JSON.stringify(cleanPayload, null, 2));
     console.log('🔑 cleanPayload keys:', Object.keys(cleanPayload));

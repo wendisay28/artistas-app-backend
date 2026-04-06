@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { db } from '../db.js';
-import { offers, users, artists } from '../schema.js';
+import { offers, users } from '../schema.js';
 import { eq, and, or, desc, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -176,8 +176,8 @@ export const getOfferById = async (req: Request, res: Response) => {
     if (offer.artistId) {
       [artist] = await db
         .select()
-        .from(artists)
-        .where(eq(artists.id, offer.artistId))
+        .from(users)
+        .where(eq(users.id, offer.artistId))
         .limit(1);
     }
 

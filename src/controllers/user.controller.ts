@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { storage } from '../storage/index.js';
 import { auth } from '../config/firebase.js';
-import { users, artists, companies, reviews, categories, disciplines, roles, specializations, gallery, featuredItems } from '../schema.js';
+import { users, companies, reviews, categories, disciplines, roles, specializations, gallery, featuredItems } from '../schema.js';
 import { eq, and, or, desc, sql } from 'drizzle-orm';
 
 export const userController = {

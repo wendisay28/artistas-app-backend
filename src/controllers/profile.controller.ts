@@ -1,50 +1,33 @@
 import { Request, Response } from 'express';
 import { db } from '../db.js';
-import { users, artists, companies, reviews, categories, disciplines, roles, specializations, gallery, featuredItems } from '../schema.js';
+import { users, companies, reviews, categories, disciplines, roles, specializations, gallery, featuredItems } from '../schema.js';
 import { eq, and, or, desc, sql } from 'drizzle-orm';
-
-// Nota: Se removieron tipos externos no definidos (User, Artist) para evitar conflictos de compilación.
 
 // Obtener todos los perfiles con filtros
 export const getProfiles = async (req: Request, res: Response) => {
   try {
     const { category, city, minRating, limit = '10', offset = '0' } = req.query;
 
-    // Validar paginación - máximo 100 items por página
     const limitNum = Math.min(Number(limit) || 10, 100);
     const offsetNum = Math.max(Number(offset) || 0, 0);
 
-    // Construir condiciones base
-    // Solo buscar artistas verificados (las empresas se manejan por tabla companies separada)
-    const conditions = [
+    const conditions: any[] = [
       eq(users.userType, 'artist'),
       eq(users.isVerified, true)
     ];
 
-    // Agregar condiciones de filtro si existen
     if (city) conditions.push(eq(users.city, city as string));
     if (minRating) conditions.push(sql`${users.rating} >= ${Number(minRating)}`);
     if (category) {
-      const categoryConditions = [];
-
-      if (artists.categoryId) {
-        categoryConditions.push(eq(artists.categoryId, Number(category)));
+      const categoryConditions: any[] = [eq(users.categoryId, Number(category))];
+      if (users.subcategories) {
+        categoryConditions.push(sql`${users.subcategories} @> ARRAY[${category}]::text[]`);
       }
-
-      if (artists.subcategories) {
-        categoryConditions.push(sql`${artists.subcategories} @> ARRAY[${category}]::text[]`);
-      }
-
-      if (categoryConditions.length > 0) {
-        const orCondition = or(...categoryConditions);
-        if (orCondition) {
-          conditions.push(orCondition);
-        }
-      }
+      const orCondition = or(...categoryConditions);
+      if (orCondition) conditions.push(orCondition);
     }
 
-    // Construir consulta final con LEFT JOIN para evitar N+1
-    const query = db
+    const profiles = await db
       .select({
         id: users.id,
         firstName: users.firstName,
@@ -60,50 +43,27 @@ export const getProfiles = async (req: Request, res: Response) => {
         isFeatured: users.isFeatured,
         isAvailable: users.isAvailable,
         createdAt: users.createdAt,
-        // Incluir datos de artista directamente
-        artistId: artists.id,
-        artistName: artists.artistName,
-        stageName: artists.stageName,
-        categoryId: artists.categoryId,
-        yearsOfExperience: artists.yearsOfExperience,
-        viewCount: artists.viewCount,
-        disciplineId: artists.disciplineId,
-        roleId: artists.roleId,
-        specializationId: artists.specializationId,
-        tags: artists.tags,
+        artistName: users.artistName,
+        stageName: users.stageName,
+        categoryId: users.categoryId,
+        yearsOfExperience: users.yearsOfExperience,
+        viewCount: users.viewCount,
+        disciplineId: users.disciplineId,
+        roleId: users.roleId,
+        specializationId: users.specializationId,
+        tags: users.tags,
       })
       .from(users)
-      .leftJoin(artists, eq(users.id, artists.userId))
       .where(and(...conditions))
       .orderBy(desc(users.isFeatured), desc(users.rating))
       .limit(limitNum)
       .offset(offsetNum);
 
-    const profiles = await query;
-
-    // Mapear datos sin queries adicionales
     const enrichedProfiles = profiles.map((profile) => {
-      const profileData: any = {
-        id: profile.id,
-        firstName: profile.firstName,
-        lastName: profile.lastName,
-        displayName: profile.displayName,
-        profileImageUrl: profile.profileImageUrl,
-        coverImageUrl: profile.coverImageUrl,
-        userType: profile.userType,
-        bio: profile.bio,
-        city: profile.city,
-        rating: profile.rating,
-        totalReviews: profile.totalReviews,
-        isFeatured: profile.isFeatured,
-        isAvailable: profile.isAvailable,
-        createdAt: profile.createdAt,
-      };
+      const profileData: any = { ...profile };
 
-      // Incluir datos de artista si existen
-      if (profile.userType === 'artist' && profile.artistId) {
+      if (profile.userType === 'artist') {
         profileData.artist = {
-          id: profile.artistId,
           artistName: profile.artistName,
           stageName: profile.stageName,
           categoryId: profile.categoryId,
@@ -115,7 +75,6 @@ export const getProfiles = async (req: Request, res: Response) => {
           tags: profile.tags,
         };
 
-        // Calcular estadísticas
         profileData.stats = {
           totalReviews: Number(profile.totalReviews) || 0,
           averageRating: Number(profile.rating) || 0,
@@ -138,38 +97,42 @@ export const getProfiles = async (req: Request, res: Response) => {
 export const getProfileById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
-    // Obtener datos básicos del usuario
+
     const [profile] = await db
       .select()
       .from(users)
       .where(eq(users.id, id))
       .limit(1);
-    
+
     if (!profile) {
       return res.status(404).json({ message: 'Perfil no encontrado' });
     }
-    
+
     const profileData: any = { ...profile };
-    
-    // Obtener detalles adicionales según el tipo de perfil
-    if (profile.userType === 'artist' && profile.id) {
-      const [artist] = await db
-        .select()
-        .from(artists)
-        .where(eq(artists.userId, id));
-      
-      if (artist) {
-        profileData.artist = artist;
-        
-        // Calcular estadísticas
-        profileData.stats = {
-          totalReviews: Number(profile.totalReviews) || 0,
-          averageRating: Number(profile.rating) || 0,
-          yearsExperience: artist.yearsOfExperience || 0,
-          totalEvents: artist.viewCount ? Math.floor(Number(artist.viewCount) / 2) : 0
-        };
-      }
+
+    if (profile.userType === 'artist') {
+      profileData.artist = {
+        artistName: profile.artistName,
+        stageName: profile.stageName,
+        categoryId: profile.categoryId,
+        disciplineId: profile.disciplineId,
+        roleId: profile.roleId,
+        specializationId: profile.specializationId,
+        description: profile.description,
+        bio: profile.bio,
+        tags: profile.tags ?? [],
+        yearsOfExperience: profile.yearsOfExperience ?? null,
+        workExperience: profile.workExperience ?? [],
+        education: profile.education ?? [],
+        viewCount: profile.viewCount,
+      };
+
+      profileData.stats = {
+        totalReviews: Number(profile.totalReviews) || 0,
+        averageRating: Number(profile.rating) || 0,
+        yearsExperience: profile.yearsOfExperience || 0,
+        totalEvents: profile.viewCount ? Math.floor(Number(profile.viewCount) / 2) : 0
+      };
     }
 
     res.json(profileData);
@@ -185,11 +148,9 @@ export const getProfileReviews = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { limit = '10', offset = '0' } = req.query;
 
-    // Validar paginación - máximo 100 items por página
     const limitNum = Math.min(Number(limit) || 10, 100);
     const offsetNum = Math.max(Number(offset) || 0, 0);
 
-    // Verificar si el perfil existe
     const [profile] = await db
       .select({ id: users.id })
       .from(users)
@@ -200,41 +161,11 @@ export const getProfileReviews = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Perfil no encontrado' });
     }
 
-    // Obtener reseñas del perfil SOLO para artistas del usuario
-    const profileReviews = await db
-      .select({
-        id: reviews.id,
-        userId: reviews.userId,
-        score: reviews.score,
-        comment: reviews.reason,
-        type: reviews.type,
-        createdAt: reviews.createdAt
-      })
-      .from(reviews)
-      .where(
-        sql`${reviews.artistId} IN (SELECT id FROM artists WHERE user_id = ${id})`
-      )
-      .limit(limitNum)
-      .offset(offsetNum);
-
-    // Obtener estadísticas de calificaciones
-    const [ratingStats] = await db
-      .select({
-        average: sql<number>`COALESCE(AVG(score), 0) as average`,
-        count: sql<number>`COUNT(*) as count`,
-      })
-      .from(reviews)
-      .where(
-        sql`${reviews.artistId} IN (SELECT id FROM artists WHERE user_id = ${id})`
-      );
-
+    // TODO: reviews.artistId was FK to artists.id (removed). Update reviews table to reference users.id.
+    // For now returning empty reviews until migration is done.
     res.json({
-      reviews: profileReviews,
-      stats: {
-        averageRating: ratingStats?.average ? parseFloat(String(ratingStats.average)) : 0,
-        totalReviews: ratingStats?.count ? parseInt(String(ratingStats.count)) : 0,
-        ratingDistribution: []
-      }
+      reviews: [],
+      stats: { averageRating: 0, totalReviews: 0, ratingDistribution: [] }
     });
   } catch (error) {
     console.error('Error al obtener reseñas del perfil:', error);
@@ -242,12 +173,11 @@ export const getProfileReviews = async (req: Request, res: Response) => {
   }
 };
 
-// Obtener perfil público completo (con trabajos destacados y toda la información)
+// Obtener perfil público completo
 export const getPublicProfile = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Obtener datos básicos del usuario
     const [profile] = await db
       .select()
       .from(users)
@@ -271,156 +201,125 @@ export const getPublicProfile = async (req: Request, res: Response) => {
       bio: profile.bio,
       shortBio: profile.shortBio,
       rating: profile.rating,
-      projectsCompleted: 0, // TODO: implementar sistema de proyectos
+      projectsCompleted: 0,
       reviewsCount: profile.totalReviews,
       followersCount: profile.fanCount || 0,
-      followingCount: 0, // TODO: implementar sistema de following
+      followingCount: 0,
       isVerified: profile.isVerified,
       createdAt: profile.createdAt,
     };
 
-    // Obtener detalles adicionales según el tipo de perfil
     if (profile.userType === 'artist') {
-      // Obtener datos del artista con JOINs para categorías
-      const [artistWithCategories] = await db
+      // Get category hierarchy names
+      const [catRow] = profile.categoryId ? await db
         .select({
-          // Datos del artista
-          id: artists.id,
-          stageName: artists.stageName,
-          artistName: artists.artistName,
-          description: artists.description,
-          categoryId: artists.categoryId,
-          disciplineId: artists.disciplineId,
-          roleId: artists.roleId,
-          specializationId: artists.specializationId,
-          yearsOfExperience: artists.yearsOfExperience,
-          availability: artists.availability,
-          tags: artists.tags,
-          portfolioUrl: artists.portfolio,
-          baseCity: artists.baseCity,
-          education: artists.education,
-          languages: artists.languages,
-          licenses: artists.licenses,
-          linkedAccounts: artists.linkedAccounts,
-          workExperience: artists.workExperience,
-          hourlyRate: artists.hourlyRate,
-          pricingType: artists.pricingType,
-          priceRange: artists.priceRange,
-          experience: artists.experience,
-          artistType: artists.artistType,
-          travelAvailability: artists.travelAvailability,
-          travelDistance: artists.travelDistance,
-          // Nombres de las categorías
           categoryName: categories.name,
           categoryCode: categories.code,
-          disciplineName: disciplines.name,
-          disciplineCode: disciplines.code,
-          roleName: roles.name,
-          roleCode: roles.code,
-          specializationName: specializations.name,
-          specializationCode: specializations.code,
         })
-        .from(artists)
-        .leftJoin(categories, eq(artists.categoryId, categories.id))
-        .leftJoin(disciplines, eq(artists.disciplineId, disciplines.id))
-        .leftJoin(roles, eq(artists.roleId, roles.id))
-        .leftJoin(specializations, eq(artists.specializationId, specializations.id))
-        .where(eq(artists.userId, id))
-        .limit(1);
+        .from(categories)
+        .where(eq(categories.id, profile.categoryId))
+        .limit(1) : [null];
 
-      if (artistWithCategories) {
-        const artist = artistWithCategories;
-        // Formatear datos del artista con información de categorías
-        profileData.artistData = {
-          stageName: artist.stageName,
-          professionalTitle: artist.stageName || artist.artistName,
-          category: artist.categoryId ? {
-            id: artist.categoryId,
-            code: artist.categoryCode || artist.categoryId.toString(),
-            name: artist.categoryName || 'Categoría'
-          } : null,
-          discipline: artist.disciplineId ? {
-            id: artist.disciplineId,
-            code: artist.disciplineCode || artist.disciplineId.toString(),
-            name: artist.disciplineName || 'Disciplina'
-          } : null,
-          role: artist.roleId ? {
-            id: artist.roleId,
-            code: artist.roleCode || artist.roleId.toString(),
-            name: artist.roleName || 'Rol'
-          } : null,
-          specialization: artist.specializationId ? {
-            id: artist.specializationId,
-            code: artist.specializationCode || artist.specializationId.toString(),
-            name: artist.specializationName || 'Especialización'
-          } : null,
-          description: artist.description,  // texto largo "Acerca de mí" (≠ user.bio que es frase corta)
-          yearsOfExperience: artist.yearsOfExperience,
-          availability: artist.availability || {},
-          tags: artist.tags || [],
-          portfolioUrl: null, // El portfolio se obtiene desde portfolioPhotos
-          baseCity: artist.baseCity || profile.city,
-          // Información académica y profesional
-          education: artist.education || [],
-          languages: artist.languages || [],
-          licenses: artist.licenses || [],
-          linkedAccounts: artist.linkedAccounts || {},
-          workExperience: artist.workExperience || [],
-          // Información de precios
-          hourlyRate: artist.hourlyRate,
-          pricingType: artist.pricingType,
-          priceRange: artist.priceRange,
-          // Información profesional adicional
-          experience: artist.experience,
-          artistType: artist.artistType,
-          travelAvailability: artist.travelAvailability,
-          travelDistance: artist.travelDistance,
-        };
+      const [discRow] = profile.disciplineId ? await db
+        .select({ disciplineName: disciplines.name, disciplineCode: disciplines.code })
+        .from(disciplines)
+        .where(eq(disciplines.id, profile.disciplineId))
+        .limit(1) : [null];
 
-        // Obtener trabajos destacados del portafolio
-        try {
-          // Usar la tabla gallery en lugar de portfolio_photos
-          const featuredWorkResult = await db.select()
-            .from(gallery)
-            .where(and(
-              eq(gallery.userId, id),
-              eq(gallery.isFeatured, true),
-              eq(gallery.isPublic, true)
-            ))
-            .orderBy(gallery.orderPosition)
-            .limit(4);
-          profileData.featuredWork = featuredWorkResult || [];
-        } catch (error) {
-          console.error('Error al obtener trabajos destacados:', error);
-          profileData.featuredWork = [];
-        }
+      const [roleRow] = profile.roleId ? await db
+        .select({ roleName: roles.name, roleCode: roles.code })
+        .from(roles)
+        .where(eq(roles.id, profile.roleId))
+        .limit(1) : [null];
 
-        // Calcular estadísticas públicas
-        profileData.stats = {
-          totalProjects: 0, // TODO: implementar contador de proyectos
-          totalReviews: Number(profile.totalReviews) || 0,
-          averageRating: Number(profile.rating) || 0,
-          responseTime: '< 24h', // TODO: calcular tiempo de respuesta real
-        };
+      const [specRow] = profile.specializationId ? await db
+        .select({ specializationName: specializations.name, specializationCode: specializations.code })
+        .from(specializations)
+        .where(eq(specializations.id, profile.specializationId))
+        .limit(1) : [null];
+
+      const artistMetadata = profile.artistMetadata as Record<string, any> | undefined;
+
+      profileData.artistData = {
+        stageName: profile.stageName,
+        professionalTitle: profile.stageName || profile.artistName,
+        category: profile.categoryId ? {
+          id: profile.categoryId,
+          code: catRow?.categoryCode || profile.categoryId.toString(),
+          name: catRow?.categoryName || 'Categoría'
+        } : null,
+        discipline: profile.disciplineId ? {
+          id: profile.disciplineId,
+          code: discRow?.disciplineCode || profile.disciplineId.toString(),
+          name: discRow?.disciplineName || 'Disciplina'
+        } : null,
+        role: profile.roleId ? {
+          id: profile.roleId,
+          code: roleRow?.roleCode || profile.roleId.toString(),
+          name: roleRow?.roleName || 'Rol'
+        } : null,
+        specialization: profile.specializationId ? {
+          id: profile.specializationId,
+          code: specRow?.specializationCode || profile.specializationId.toString(),
+          name: specRow?.specializationName || 'Especialización'
+        } : null,
+        // description: texto largo "Acerca de mí" (≠ user.bio que es frase corta)
+        description: profile.description,
+        yearsOfExperience: profile.yearsOfExperience,
+        availability: profile.availability || {},
+        tags: profile.tags || [],
+        portfolioUrl: null,
+        baseCity: profile.baseCity || profile.city,
+        education: profile.education || [],
+        languages: profile.languages || [],
+        licenses: profile.licenses || [],
+        linkedAccounts: profile.linkedAccounts || {},
+        workExperience: profile.workExperience || [],
+        hourlyRate: profile.hourlyRate,
+        pricingType: profile.pricingType,
+        priceRange: profile.priceRange,
+        experience: profile.experience,
+        artistType: profile.artistType,
+        travelAvailability: profile.travelAvailability,
+        travelDistance: profile.travelDistance,
+      };
+
+      try {
+        const featuredWorkResult = await db.select()
+          .from(gallery)
+          .where(and(
+            eq(gallery.userId, id),
+            eq(gallery.isFeatured, true),
+            eq(gallery.isPublic, true)
+          ))
+          .orderBy(gallery.orderPosition)
+          .limit(4);
+        profileData.featuredWork = featuredWorkResult || [];
+      } catch (error) {
+        console.error('Error al obtener trabajos destacados:', error);
+        profileData.featuredWork = [];
       }
-    } else {
-      // Para usuarios tipo 'client', 'company', o 'general' (contratantes)
-      // Agregar estadísticas básicas
+
       profileData.stats = {
-        totalProjects: 0, // TODO: implementar contador de proyectos publicados
+        totalProjects: 0,
+        totalReviews: Number(profile.totalReviews) || 0,
+        averageRating: Number(profile.rating) || 0,
+        responseTime: '< 24h',
+      };
+    } else {
+      profileData.stats = {
+        totalProjects: 0,
         totalReviews: Number(profile.totalReviews) || 0,
         averageRating: Number(profile.rating) || 0,
         responseTime: '< 24h',
       };
 
-      // Agregar datos adicionales para empresas si existen
       if (profile.userType === 'company') {
-        // TODO: Implementar datos de empresa cuando exista la tabla
         profileData.companyData = {
           companyName: profile.displayName || `${profile.firstName} ${profile.lastName}`,
-          industry: null, // TODO: agregar campo industry
-          size: null, // TODO: agregar campo company size
-          website: null, // TODO: agregar campo website
+          industry: null,
+          size: null,
+          website: null,
         };
       }
     }
@@ -438,11 +337,9 @@ export const getMyReviews = async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { limit = '10', offset = '0' } = req.query;
 
-    // Validar paginación - máximo 100 items por página
     const limitNum = Math.min(Number(limit) || 10, 100);
     const offsetNum = Math.max(Number(offset) || 0, 0);
 
-    // Obtener reseñas del usuario autenticado
     const myReviews = await db
       .select({
         id: reviews.id,
@@ -457,7 +354,6 @@ export const getMyReviews = async (req: Request, res: Response) => {
       .limit(limitNum)
       .offset(offsetNum);
 
-    // Obtener estadísticas de calificaciones
     const [ratingStats] = await db
       .select({
         average: sql<number>`COALESCE(AVG(score), 0) as average`,

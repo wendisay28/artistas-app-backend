@@ -24,17 +24,13 @@ import { MessageStorage } from './messages.js';
 import { HiringStorage } from './hiring.js';
 
 // Re-export commonly used schema tables for easier access
-const { users, events, venues, blogPosts, artists, categories, messages, recommendations } = schema;
+const { users, events, venues, blogPosts, categories, messages, recommendations } = schema;
 
 const config: StorageConfig = { db };
 
 // Definir tipos para las relaciones
 type UserWithRelations = typeof users.$inferSelect;
 type CategoryWithRelations = typeof categories.$inferSelect;
-type ArtistWithRelations = typeof artists.$inferSelect & {
-  user: UserWithRelations;
-  category?: CategoryWithRelations;
-};
 
 type SocialMedia = {
   instagram?: string;
@@ -117,6 +113,7 @@ export class DatabaseStorage implements IStorage {
       email: string;
       firstName: string | null;
       lastName: string | null;
+      username: string | null;
       profileImageUrl: string | null;
       coverImageUrl: string | null;
       userType: 'general' | 'artist' | 'company';
@@ -127,6 +124,7 @@ export class DatabaseStorage implements IStorage {
       socialMedia: Record<string, string | undefined>;
     }>
   ): Promise<UserWithRelations> {
+    console.log('🔍 [DatabaseStorage.upsertUser] Recibido user.username:', user.username);
     const now = new Date();
     
     // Primero verificar si el usuario ya existe
@@ -145,6 +143,7 @@ export class DatabaseStorage implements IStorage {
       if (user.email !== undefined) updateData.email = user.email;
       if (user.firstName !== undefined) updateData.firstName = user.firstName;
       if (user.lastName !== undefined) updateData.lastName = user.lastName;
+      if (user.username !== undefined) updateData.username = user.username || null;
       if (user.profileImageUrl !== undefined) updateData.profileImageUrl = user.profileImageUrl;
       if (user.coverImageUrl !== undefined) updateData.coverImageUrl = user.coverImageUrl;
       if (user.userType !== undefined) updateData.userType = user.userType;
@@ -154,11 +153,15 @@ export class DatabaseStorage implements IStorage {
       if (user.onboardingCompleted !== undefined) updateData.onboardingCompleted = user.onboardingCompleted;
       if (user.socialMedia !== undefined) updateData.socialMedia = user.socialMedia;
       
+      console.log('🔍 [DatabaseStorage.upsertUser] updateData:', JSON.stringify(updateData, null, 2));
+      
       const [result] = await this.db
         .update(users)
         .set(updateData)
         .where(eq(users.id, user.id))
         .returning();
+      
+      console.log('🔍 [DatabaseStorage.upsertUser] result.username:', result.username);
       
       return result as UserWithRelations;
     } else {
@@ -193,102 +196,24 @@ export class DatabaseStorage implements IStorage {
     return this.userStorage.searchUsers(query, limit);
   }
 
-  // Artist methods
-  async getArtist(id: number): Promise<ArtistWithRelations | undefined> {
-    try {
-      const result = await this.db
-        .select()
-        .from(artists)
-        .leftJoin(users, eq(artists.userId, users.id))
-        .leftJoin(categories, eq(artists.categoryId, categories.id))
-        .where(eq(artists.id, id))
-        .limit(1);
-
-      if (result.length === 0) {
-        return undefined;
-      }
-
-      const artistData = result[0];
-      const artist = artistData.artists;
-      const user = artistData.users;
-      const category = artistData.categories;
-      
-      if (!user) {
-        throw new Error('User not found for artist');
-      }
-
-      return {
-        ...artist,
-        user,
-        category: category || undefined
-      };
-    } catch (error) {
-      console.error('Error fetching artist:', error);
-      throw new Error('Failed to fetch artist');
-    }
+  // Artist methods — all delegated to ArtistStorage (artists merged into users)
+  async getArtist(userId: string) {
+    return this.artistStorage.getArtist(userId);
   }
 
-  async getArtists(filters: { categoryId?: number; userId?: string } = {}): Promise<ArtistWithRelations[]> {
-    // Delegate to ArtistStorage which includes discipline, role, specialization joins
-    return this.artistStorage.getArtists({ userId: filters.userId }) as any;
+  async getArtists(filters: { categoryId?: number; userId?: string } = {}) {
+    return this.artistStorage.getArtists({ userId: filters.userId });
   }
 
-  async createArtist(artistData: Omit<typeof artists.$inferInsert, 'id' | 'createdAt' | 'updatedAt'>): Promise<typeof artists.$inferSelect> {
-    try {
-      const [newArtist] = await this.db
-        .insert(artists)
-        .values({
-          ...artistData,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        })
-        .returning();
-
-      if (!newArtist) {
-        throw new Error('Failed to create artist');
-      }
-
-      return newArtist;
-    } catch (error) {
-      console.error('Error creating artist:', error);
-      throw new Error('Failed to create artist');
-    }
+  async createArtist(artistData: { userId: string; artistName: string; categoryId?: number | null; bio?: string | null }) {
+    return this.artistStorage.createArtist(artistData);
   }
 
-  async updateArtist(
-    id: number,
-    artistData: Partial<typeof artists.$inferInsert>
-  ): Promise<typeof artists.$inferSelect> {
-    try {
-      console.log('🔧 storage.updateArtist - artistData ANTES de limpiar:', Object.keys(artistData));
-
-      // Limpiar undefined values antes de actualizar (Postgres no acepta undefined)
-      const cleanData = Object.fromEntries(
-        Object.entries(artistData).filter(([_, v]) => v !== undefined)
-      );
-
-      console.log('🧹 storage.updateArtist - cleanData DESPUÉS de limpiar:', Object.keys(cleanData));
-      console.log('🧹 storage.updateArtist - cleanData valores:', JSON.stringify(cleanData, null, 2));
-      console.log('📝 DESCRIPTION en storage:', cleanData.description);
-
-      const [updatedArtist] = await this.db
-        .update(artists)
-        .set({
-          ...cleanData,
-          updatedAt: new Date()
-        })
-        .where(eq(artists.id, id))
-        .returning();
-
-      if (!updatedArtist) {
-        throw new Error(`Artist with ID ${id} not found`);
-      }
-
-      return updatedArtist;
-    } catch (error) {
-      console.error(`Error updating artist ${id}:`, error);
-      throw new Error('Failed to update artist');
-    }
+  async updateArtist(userId: string, artistData: Partial<typeof users.$inferInsert>) {
+    const cleanData = Object.fromEntries(
+      Object.entries(artistData).filter(([_, v]) => v !== undefined)
+    ) as any;
+    return this.artistStorage.updateArtist(userId, cleanData);
   }
 
   // Message methods
@@ -368,26 +293,32 @@ export class DatabaseStorage implements IStorage {
     const companyAlias = alias(users, 'company');
     
     const results = await this.db
-      .select()
+      .select({
+        venue: venues,
+        owner: companyAlias
+      })
       .from(venues)
       .innerJoin(companyAlias, eq(venues.companyId, companyAlias.id))
       .where(eq(venues.id, id));
 
     const result = results[0];
-    if (!result || !result.company) return undefined;
+    if (!result) return undefined;
 
     return {
-      ...result.venues,
-      owner: result.company
-    } as VenueWithCompany;
+      ...result.venue,
+      owner: result.owner
+    };
   }
 
   async getVenues(filters: { ownerId?: string } = {}): Promise<VenueWithCompany[]> {
     const companyAlias = alias(users, 'company');
     
-    // Construir la consulta base
+    // Construir la consulta base con select explícito
     const query = this.db
-      .select()
+      .select({
+        venue: venues,
+        owner: companyAlias
+      })
       .from(venues)
       .innerJoin(companyAlias, eq(venues.companyId, companyAlias.id));
 
@@ -400,8 +331,8 @@ export class DatabaseStorage implements IStorage {
     
     // Mapear los resultados al formato esperado
     return results.map(row => ({
-      ...row.venues,
-      owner: row.company!
+      ...row.venue,
+      owner: row.owner
     }));
   }
 
@@ -417,14 +348,9 @@ export class DatabaseStorage implements IStorage {
     return this.venueStorage.deleteVenue(id);
   }
 
-  // Artist deletion
-  async deleteArtist(id: number): Promise<void> {
-    try {
-      await this.db.delete(artists).where(eq(artists.id, id));
-    } catch (error) {
-      console.error(`Error deleting artist ${id}:`, error);
-      throw new Error('Failed to delete artist');
-    }
+  // Artist deletion (degrades user to 'general' type)
+  async deleteArtist(userId: string): Promise<void> {
+    return this.artistStorage.deleteArtist(userId);
   }
 
   // Company methods

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { storage } from '../storage/index.js';
 import { eq } from 'drizzle-orm';
-import { users, artists, categories, disciplines, roles, specializations } from '../schema.js';
+import { users, categories, disciplines, roles, specializations } from '../schema.js';
 import crypto from 'crypto';
 import { EmailService } from '../services/email.service.js'; // Servicio de email
 
@@ -233,14 +233,9 @@ export const onboardingController = {
         .where(eq(users.id, userId));
       console.log('✅ Usuario actualizado correctamente');
 
-      // Si es artista, crear o actualizar perfil de artista
+      // Si es artista, actualizar campos de artista en users (artists merged into users)
       if (userType === 'artist') {
-        console.log('🎨 El usuario es artista, procesando perfil de artista...');
-        const existingArtist = await storage.db
-          .select()
-          .from(artists)
-          .where(eq(artists.userId, userId))
-          .limit(1);
+        console.log('🎨 El usuario es artista, procesando perfil de artista en users...');
 
         // Convertir códigos a IDs
         const categoryId = finalData?.categoryId ? await getCategoryIdByCode(finalData.categoryId) : null;
@@ -260,40 +255,27 @@ export const onboardingController = {
           }
         }
 
-        const artistData = {
-          userId,
-          artistName: finalData?.username || 'Artista',
-          stageName: finalData?.stageName || finalData?.username || null,
-          categoryId,
-          disciplineId,
-          roleId,
-          specializationId,
-          additionalTalents,
-          subcategories: finalData?.subcategories || [],
-          tags: finalData?.tags || [],
-          bio: finalData?.shortBio,
-          baseCity: finalData?.city,
-          availability: finalData?.availability || {},
-          gallery: finalData?.gallery || [],
-          isAvailable: finalData?.isAvailable !== undefined ? finalData.isAvailable : true,
-          isProfileComplete: true,
-        };
-
-        if (existingArtist && existingArtist.length > 0) {
-          // Actualizar artista existente
-          await storage.db
-            .update(artists)
-            .set({
-              ...artistData,
-              updatedAt: new Date(),
-            })
-            .where(eq(artists.userId, userId));
-        } else {
-          // Crear nuevo artista
-          await storage.db
-            .insert(artists)
-            .values(artistData as any);
-        }
+        await storage.db
+          .update(users)
+          .set({
+            userType: 'artist',
+            artistName: finalData?.username || 'Artista',
+            stageName: finalData?.stageName || finalData?.username || null,
+            categoryId,
+            disciplineId,
+            roleId,
+            specializationId,
+            additionalTalents,
+            subcategories: finalData?.subcategories || [],
+            tags: finalData?.tags || [],
+            baseCity: finalData?.city,
+            availability: finalData?.availability || {},
+            gallery: finalData?.gallery || [],
+            isAvailable: finalData?.isAvailable !== undefined ? finalData.isAvailable : true,
+            isProfileComplete: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, userId));
       }
 
       // Determinar redirección

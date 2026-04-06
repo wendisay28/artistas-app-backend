@@ -1,5 +1,5 @@
 import { db } from '../db.js';
-import { users, artists, follows } from '../schema.js';
+import { users, follows } from '../schema.js';
 import { eq, and, sql, not, inArray } from 'drizzle-orm';
 
 export class RecommendationsService {
@@ -33,17 +33,9 @@ export class RecommendationsService {
       const followingIds = following.map(f => f.followingId);
       const excludeIds = [userId, ...followingIds];
 
-      // Si el usuario es artista, obtener su categoría
-      let currentArtistCategory: number | null = null;
-      if (currentUser.userType === 'artist') {
-        const [artistProfile] = await db
-          .select()
-          .from(artists)
-          .where(eq(artists.userId, userId))
-          .limit(1);
-
-        currentArtistCategory = artistProfile?.categoryId || null;
-      }
+      // Si el usuario es artista, obtener su categoría (ahora en users directamente)
+      const currentArtistCategory: number | null =
+        currentUser.userType === 'artist' ? (currentUser.categoryId ?? null) : null;
 
       // ESTRATEGIA 1: Usuarios de la misma ciudad
       const sameCityUsers = currentUser.city
@@ -89,10 +81,10 @@ export class RecommendationsService {
                 score: sql<number>`4`, // Score más alto para misma categoría
               })
               .from(users)
-              .innerJoin(artists, eq(artists.userId, users.id))
               .where(
                 and(
-                  eq(artists.categoryId, currentArtistCategory),
+                  eq(users.categoryId, currentArtistCategory),
+                  eq(users.userType, 'artist'),
                   not(inArray(users.id, excludeIds))
                 )
               )
@@ -223,13 +215,14 @@ export class RecommendationsService {
   async getSimilarUsers(userId: string, limit: number = 10) {
     try {
       // Si el usuario es artista, buscar artistas con tags similares
-      const [currentArtist] = await db
+      // Los datos de artista están ahora directamente en users
+      const [currentArtistUser] = await db
         .select()
-        .from(artists)
-        .where(eq(artists.userId, userId))
+        .from(users)
+        .where(and(eq(users.id, userId), eq(users.userType, 'artist')))
         .limit(1);
 
-      if (!currentArtist || !currentArtist.tags || currentArtist.tags.length === 0) {
+      if (!currentArtistUser || !currentArtistUser.tags || currentArtistUser.tags.length === 0) {
         return [];
       }
 
@@ -253,25 +246,25 @@ export class RecommendationsService {
           userType: users.userType,
           city: users.city,
           isVerified: users.isVerified,
-          tags: artists.tags,
+          tags: users.tags,
           commonTags: sql<number>`(
             SELECT COUNT(*)
-            FROM unnest(${artists.tags}) AS tag
-            WHERE tag = ANY(${currentArtist.tags})
+            FROM unnest(${users.tags}) AS tag
+            WHERE tag = ANY(${currentArtistUser.tags})
           )`,
         })
-        .from(artists)
-        .innerJoin(users, eq(users.id, artists.userId))
+        .from(users)
         .where(
           and(
+            eq(users.userType, 'artist'),
             not(inArray(users.id, excludeIds)),
-            sql`${artists.tags} && ${currentArtist.tags}` // Operador de intersección de arrays
+            sql`${users.tags} && ${currentArtistUser.tags}` // Operador de intersección de arrays
           )
         )
         .orderBy(sql`(
           SELECT COUNT(*)
-          FROM unnest(${artists.tags}) AS tag
-          WHERE tag = ANY(${currentArtist.tags})
+          FROM unnest(${users.tags}) AS tag
+          WHERE tag = ANY(${currentArtistUser.tags})
         ) DESC`)
         .limit(limit);
 

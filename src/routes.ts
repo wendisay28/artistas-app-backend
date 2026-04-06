@@ -10,9 +10,8 @@ import {
   getUserBookings
 } from "./controllers/availability.controller.js";
 import { auth } from "./config/firebase.js";
-import { 
+import {
   users,
-  artists,
   events,
   venues,
   recommendations,
@@ -432,14 +431,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get artist ID from user ID
       const artists = await storage.artistStorage.getArtists();
-      const userArtists = artists.filter(artist => artist.artist.userId === user.id);
+      const userArtists = artists.filter(artist => artist.artist.id === user.id);
       
       if (!userArtists || userArtists.length === 0) {
         return res.status(400).json({ error: 'User is not registered as an artist' });
       }
       
       const artist = userArtists[0];
-      if (!artist || !artist.artist || typeof artist.artist.id !== 'number') {
+      if (!artist || !artist.artist || !artist.artist.id) {
         return res.status(400).json({ error: 'Invalid artist data' });
       }
 

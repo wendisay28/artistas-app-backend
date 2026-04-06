@@ -1,4 +1,4 @@
-import { pgTable, uuid, integer, time, boolean, text, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, integer, varchar, time, boolean, text, timestamp, pgEnum } from "drizzle-orm/pg-core";
 
 // Enums
 export const blockTypeEnum = pgEnum("block_type", ["vacation", "personal", "event", "other"]);
@@ -8,7 +8,7 @@ export const bookingStatusEnum = pgEnum("booking_status", ["pending", "accepted"
 // Tabla de reglas de disponibilidad semanal
 export const availabilityRules = pgTable("availability_rules", {
   id: uuid("id").primaryKey().defaultRandom(),
-  artistId: integer("artist_id").notNull(),
+  artistId: varchar("artist_id").notNull(), // references users.id
   dayOfWeek: integer("day_of_week").notNull(), // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
   startTime: time("start_time").notNull(),
   endTime: time("end_time").notNull(),
@@ -21,7 +21,7 @@ export const availabilityRules = pgTable("availability_rules", {
 // Tabla de fechas bloqueadas
 export const blockedDates = pgTable("blocked_dates", {
   id: uuid("id").primaryKey().defaultRandom(),
-  artistId: integer("artist_id").notNull(),
+  artistId: varchar("artist_id").notNull(), // references users.id
   date: text("date").notNull(), // YYYY-MM-DD format
   reason: text("reason"),
   blockType: blockTypeEnum("block_type").default("personal"),
@@ -32,7 +32,7 @@ export const blockedDates = pgTable("blocked_dates", {
 // Tabla de reservas de artistas
 export const artistBookings = pgTable("artist_bookings", {
   id: uuid("id").primaryKey().defaultRandom(),
-  artistId: integer("artist_id").notNull(),
+  artistId: varchar("artist_id").notNull(), // references users.id
   clientId: text("client_id").notNull(),
   
   // Información del evento

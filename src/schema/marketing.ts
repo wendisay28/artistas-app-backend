@@ -2,7 +2,6 @@ import { pgTable, serial, varchar, text, timestamp, boolean, integer, numeric, j
 import { sql } from 'drizzle-orm';
 import { users } from './users.js';
 import { companies, venues } from './companies.js';
-import { artists } from './artists.js';
 import { userContracts } from './contracts.js';
 
 // Tabla de campañas de empresas (marketing, colaboración, UGC)
@@ -106,7 +105,7 @@ export const campaignApplications = pgTable('campaign_applications', {
 export const bookings = pgTable('bookings', {
   id: serial('id').primaryKey(),
   companyId: integer('company_id').references(() => companies.id, { onDelete: 'cascade' }),
-  artistId: integer('artist_id').references(() => artists.id, { onDelete: 'cascade' }),
+  artistId: varchar('artist_id').references(() => users.id, { onDelete: 'cascade' }),
   venueId: integer('venue_id').references(() => venues.id, { onDelete: 'set null' }),
   userId: varchar('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
 

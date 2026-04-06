@@ -67,8 +67,8 @@ export const companies = pgTable('companies', {
 
   // Team and organization
   team: jsonb('team').default(sql`'[]'::jsonb`), // Team members with roles and bios
-  teamSize: integer('teamsize'), // Number of team members
-  foundedYear: integer('foundedyear'), // Year company was founded
+  teamSize: integer('team_size'),
+  foundedYear: integer('founded_year'),
 
   // Professional credentials
   certifications: jsonb('certifications').default(sql`'[]'::jsonb`), // Company certifications
@@ -77,21 +77,21 @@ export const companies = pgTable('companies', {
   partnerships: jsonb('partnerships').default(sql`'[]'::jsonb`), // Partner organizations
 
   // Additional contact and social
-  linkedAccounts: jsonb('linkedaccounts').default(sql`'{}'::jsonb`), // LinkedIn, etc.
+  linkedAccounts: jsonb('linked_accounts').default(sql`'{}'::jsonb`),
   languages: jsonb('languages').default(sql`'[]'::jsonb`), // Languages supported
 
   // Education and training (for companies offering educational services)
   education: jsonb('education').default(sql`'[]'::jsonb`), // Training programs offered
 
   // Work experience (for service companies showcasing past projects)
-  workExperience: jsonb('workexperience').default(sql`'[]'::jsonb`), // Past projects/clients
+  workExperience: jsonb('work_experience').default(sql`'[]'::jsonb`),
 
   // Estadísticas
   rating: numeric('rating', { precision: 3, scale: 2 }).default(sql`0`),
   totalReviews: integer('total_reviews').default(sql`0`),
   viewCount: integer('view_count').default(sql`0`),
   saveCount: integer('save_count').default(sql`0`), // Veces guardado en favoritos
-  fanCount: integer('fancount').default(sql`0`), // Unified with artists - number of fans/followers
+  fanCount: integer('fan_count').default(sql`0`),
 
   // Verificación y estado
   isVerified: boolean('is_verified').default(false),

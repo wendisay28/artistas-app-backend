@@ -2,8 +2,8 @@ import { Request, Response } from 'express';
 import { hiringStorage } from '../storage/hiring.js';
 import { z } from 'zod';
 import { db } from '../db.js';
-import { artists } from '../schema.js';
-import { eq } from 'drizzle-orm';
+import { users } from '../schema.js';
+import { eq, and } from 'drizzle-orm';
 
 // Esquemas de validación
 const createHiringRequestSchema = z.object({
@@ -326,25 +326,23 @@ export const respondToHiringRequest = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Esta oferta ya no está disponible' });
     }
 
-    // Obtener el artistId del usuario (userId es UUID string, artistId es número)
-    const artistRecord = await db
-      .select({ id: artists.id })
-      .from(artists)
-      .where(eq(artists.userId, userId))
+    // Verificar que el usuario tenga perfil de artista (artists merged into users)
+    const [artistUser] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, userId), eq(users.userType, 'artist')))
       .limit(1);
 
-    if (!artistRecord || artistRecord.length === 0) {
+    if (!artistUser) {
       return res.status(400).json({
         success: false,
         error: 'Debes tener un perfil de artista para responder a ofertas de trabajo'
       });
     }
 
-    const artistId = artistRecord[0].id;
-
     const response = await hiringStorage.createHiringResponse({
       requestId,
-      artistId: artistId, // Usar el ID numérico correcto de la tabla artists
+      artistId: userId, // artistId is now users.id (varchar)
       proposal: data.proposal,
       message: data.message,
       accepted: false, // Por defecto pending

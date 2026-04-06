@@ -1,6 +1,5 @@
 // Exportar todos los schemas
 export * from './users.js';
-export * from './artists.js';
 export * from './events.js';
 export * from './venues.js';
 export * from './categories.js';

@@ -1,12 +1,11 @@
 import { pgTable, serial, varchar, text, timestamp, integer, numeric } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users.js';
-import { artists } from './artists.js';
 
 export const offers = pgTable('offers', {
   id: serial('id').primaryKey(),
   clientId: varchar('client_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  artistId: integer('artist_id').references(() => artists.id, { onDelete: 'cascade' }),
+  artistId: varchar('artist_id').references(() => users.id, { onDelete: 'cascade' }),
   category: varchar('category').notNull(),
   description: text('description').notNull(),
   budgetMin: numeric('budget_min', { precision: 12, scale: 2 }),
